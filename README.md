@@ -2,6 +2,8 @@
 
 A three-minute browser cartoon of one commute using the proposed Berkeley Marina ferry. It runs door to door, from Grizzly Peak Blvd at Senior Ave to an office near Civic Center, and back home that evening by way of a pizza from Gioia on Hopkins.
 
+**Watch it:** https://ericdf.github.io/berkeley-ferry-commute/
+
 ## Run it
 
 It's a static site with no build step:
