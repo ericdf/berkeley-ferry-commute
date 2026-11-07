@@ -1,0 +1,96 @@
+:root {
+  --bg: #f4efe3;
+  --ink: #1d2230;
+  --panel: #fffdf6;
+  --accent: #e8562a;
+  --muted: #6b6455;
+  --line: #d9cfb8;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161a24; --ink: #eef0f5; --panel: #222838; --muted: #a9b0c0; --line: #39415a; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 1280px; margin: 0 auto; padding: 16px; overflow-x: hidden; }
+main > * { min-width: 0; }
+.stagewrap { min-width: 0; position: relative; border-radius: 14px; overflow: hidden; border: 3px solid var(--ink); background: #000; }
+canvas { display: block; width: 100%; aspect-ratio: 16 / 9; }
+
+#hud { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+#clock {
+  font: 800 clamp(20px, 3.4vw, 42px)/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: #0d0f14; color: #7CFF8A; padding: 8px 14px; border-radius: 10px;
+  border: 3px solid #fff; letter-spacing: 0.04em; text-shadow: 0 0 8px rgba(124,255,138,0.6);
+}
+#jump { background: #ffd166; color: #1d2230; font-weight: 900; font-size: clamp(14px, 2vw, 22px); padding: 4px 10px; border-radius: 8px; border: 3px solid #1d2230; }
+
+#card {
+  position: absolute; left: 3%; top: 6%; width: min(560px, 60%); max-height: 88%; overflow: auto;
+  background: rgba(255, 253, 246, 0.97); color: #1d2230; border: 4px solid #1d2230; border-radius: 16px;
+  padding: 14px 20px; font-size: clamp(12px, 1.45vw, 17px); box-shadow: 6px 6px 0 rgba(0,0,0,0.25);
+}
+#card h2 { margin: 0 0 6px; font-size: 1.6em; }
+#card h3 { margin: 10px 0 2px; font-size: 1.05em; color: #a8401e; }
+#card .row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dotted #c9bea4; padding: 2px 0; }
+#card .row b { white-space: nowrap; }
+#card .row.big { font-size: 1.25em; border-bottom: 2px solid #1d2230; }
+#card .row.sub { color: #5b1a9a; font-size: 1.1em; }
+#card .row.cold b { color: #1d6fb8; }
+#card .def { margin: 6px 0 0; font-size: 0.9em; color: #5c5446; }
+#card .sep { height: 8px; }
+
+#splash {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  background: rgba(20, 24, 36, 0.72); color: #fff; padding: 16px;
+}
+#splash[hidden] { display: none; }
+#splash h1 { margin: 0; font-size: clamp(28px, 6vw, 72px); }
+#splash p { max-width: 640px; font-size: clamp(14px, 2vw, 20px); }
+#splash button { font-size: clamp(18px, 2.4vw, 26px); padding: 12px 28px; }
+
+#caption {
+  min-height: 3.2em; margin: 10px 0 6px; padding: 10px 14px; background: var(--panel); border: 2px solid var(--line);
+  border-radius: 10px; font-size: clamp(16px, 1.9vw, 22px); font-weight: 600;
+}
+#controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select {
+  font: inherit; font-weight: 700; color: #1d2230; background: #ffd166; border: 2px solid #1d2230; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer;
+}
+button:hover { filter: brightness(1.05); }
+button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+select { background: #fff; }
+label { font-weight: 700; display: flex; gap: 6px; align-items: center; }
+#stime { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+#track { height: 12px; background: var(--line); border-radius: 6px; margin: 10px 0 6px; cursor: pointer; overflow: hidden; }
+#bar { height: 100%; width: 0; background: var(--accent); }
+#chapters { display: flex; gap: 4px; }
+.chap { flex: 1 1 0; min-width: 0; padding: 4px 2px; font-size: 13px; background: var(--panel); color: var(--ink); border: 2px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chap.on { background: var(--accent); color: #fff; border-color: var(--ink); }
+details { margin-top: 14px; background: var(--panel); border: 2px solid var(--line); border-radius: 10px; padding: 8px 14px; }
+summary { font-weight: 800; cursor: pointer; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+th { width: 34%; }
+#transcript { font-size: 15px; padding-left: 1.4em; }
+#transcript i { color: var(--muted); }
+
+@media (max-width: 700px) {
+  main { padding: 8px 16px; }
+  .stagewrap { border-width: 2px; }
+  /* the card moves below the picture so it never covers the route */
+  #card { position: static; width: auto; max-height: none; border-radius: 0; border-width: 0 0 3px; box-shadow: none; font-size: 15px; }
+  .stagewrap { display: flex; flex-direction: column; }
+  /* the clock gets its own strip above the picture so it never covers the route */
+  #hud { position: static; order: -1; flex-direction: row-reverse; justify-content: flex-start; align-items: center; padding: 6px; background: #0d0f14; }
+  #clock { padding: 4px 8px; border-width: 2px; }
+  .chap { font-size: 11px; flex-grow: 1 !important; }
+  #card .row { flex-wrap: wrap; }
+  #card .row b { white-space: normal; margin-left: auto; text-align: right; }
+  #stime { width: 100%; margin-left: 0; }
+}

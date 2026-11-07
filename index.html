@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Ferry Commute</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main>
+  <div class="stagewrap">
+    <canvas id="stage" aria-label="Animated cartoon of the Berkeley ferry commute; the transcript below describes every scene"></canvas>
+    <div id="hud">
+      <div id="clock" aria-live="off">7:05 AM</div>
+      <div id="jump" hidden></div>
+    </div>
+    <div id="card" hidden></div>
+    <div id="splash">
+      <h1>The Ferry Commute</h1>
+      <p>From the Berkeley hills to an office near Civic Center, using the proposed Marina ferry. Then home again, with a pizza.</p>
+      <button id="splashPlay">▶ Play</button>
+    </div>
+  </div>
+  <p id="caption" aria-live="polite"></p>
+  <div id="controls">
+    <button id="play" aria-pressed="false">▶ Play</button>
+    <button id="restart">↺ Restart</button>
+    <button id="morning">Morning</button>
+    <button id="evening">Evening</button>
+    <label>Speed
+      <select id="speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <span id="stime"></span>
+  </div>
+  <div id="track" role="slider" aria-label="Seek"><div id="bar"></div></div>
+  <div id="chapters"></div>
+
+  <details>
+    <summary>The numbers behind it</summary>
+    <table id="inputs"></table>
+  </details>
+  <details>
+    <summary>Transcript</summary>
+    <ol id="transcript"></ol>
+  </details>
+</main>
+<script src="js/geo.js"></script>
+<script src="js/config.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/art.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/player.js"></script>
+</body>
+</html>
