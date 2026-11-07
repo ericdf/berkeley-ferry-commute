@@ -49,3 +49,9 @@ Everything is in **`js/config.js`**:
   python3 -I tools/build-geo.py STREET_CENTERLINES.geojson coast.json
   ```
 - **What the data doesn't cover.** The centerlines stop at the Alameda County line. The San Francisco points (Ferry Building, BART stations, office) and the ferry's path west of Treasure Island are placed by hand. The city data names the hill street **Senior Ave**, so that's what the signs say.
+
+## License
+
+MIT, © 2026 Eric Friedman (see `LICENSE`). Any copy or reuse has to keep the copyright notice and credit Eric Friedman.
+
+The map data in `js/geo.js` keeps its own terms: the shoreline is © OpenStreetMap contributors (ODbL), and the street centerlines come from the City of Berkeley.
