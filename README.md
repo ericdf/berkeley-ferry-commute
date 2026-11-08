@@ -42,6 +42,7 @@ Everything is in **`js/config.js`**:
 | `js/scenes.js` | One renderer per scene |
 | `js/player.js` | Playback, controls, summary cards, transcript |
 | `tools/build-geo.py` | Builds `js/geo.js` |
+| `tools/build-play-geo.py` | Builds `js/play-geo.js`, the game's map lines |
 
 ## Map notes
 

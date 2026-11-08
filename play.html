@@ -47,7 +47,6 @@
         <div class="field"><span class="flabel">My workdays are</span><div class="seg" id="schedSeg"></div></div>
         <details class="tweaks">
           <summary>Change the assumptions</summary>
-          <label>Ferry parking, per day <output id="feeOut"></output><input type="range" id="fee" min="0" max="25" step="1"></label>
           <label>Ferry lot is usually full by <select id="fill"></select></label>
           <label>An hour of my time is worth <output id="votOut"></output><input type="range" id="vot" min="0" max="75" step="5"></label>
           <label><input type="checkbox" id="rainLyft"> When it rains, I take a Lyft instead of biking</label>
@@ -93,9 +92,10 @@
     <summary>The numbers behind it</summary>
     <div id="assump"></div>
   </details>
-  <p class="foot">Also see <a href="https://ericdf.github.io/berkeley-ferry-commute/">The Ferry Commute</a>, the cartoon. Ferry service, schedule and parking are from the proposed project documents and may change. © 2026 Eric Friedman · MIT. Shoreline © OpenStreetMap contributors; streets: City of Berkeley.</p>
+  <p class="foot">Also see <a href="https://ericdf.github.io/berkeley-ferry-commute/">The Ferry Commute</a>, the cartoon. © 2026 Eric Friedman · MIT. Shoreline © OpenStreetMap contributors; streets: City of Berkeley.</p>
 </main>
 <script src="js/geo.js"></script>
+<script src="js/play-geo.js"></script>
 <script src="js/play-config.js"></script>
 <script src="js/play-sim.js"></script>
 <script src="js/play-ui.js"></script>

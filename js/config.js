@@ -20,7 +20,7 @@ window.CFG = {
   gasPrice: 6.50,                  // [input] $/gal
   co2KgPerGallon: 8.887,           // [input] tailpipe CO2 per gallon of gasoline (EPA)
 
-  parkingFee: 20,                  // [input] terminal lot, all day
+  parkingFee: 8,                   // [input] terminal lot, all day
   ferryFare: 6.74,                 // [input] WETA's projected 2035 Berkeley–SF fare, each way
   ferrySubsidy: 6.35,              // [input] WETA's projected 2035 public subsidy per boarding.
                                    //         WETA proposes Berkeley cover the operating gap (Marina hotel-tax surcharge).

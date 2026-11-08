@@ -38,8 +38,7 @@ window.PLAY = {
     bufferMin: 5,                            // [scenario] planned slack before boarding
     maxWaitBeforeBart: 45,                   // [scenario] longer than this, you take BART instead
     lot: {
-      fee: 8,                                // [input] all-day parking; plan on $8 in Berkeley (Marina lots are $6 today;
-                                             //         the draft plan sets no ferry fee yet). Slider in the game.
+      fee: 8,                                // [input] all-day ferry parking, $8
       stalls: 265,                           // [input] City of Berkeley draft Parking Mgmt Plan, May 2026
       curb: 50,                              // [estimate] usable Marina Blvd curb; none on University west of I-80
       fillMean: '7:25',                      // [scenario] lot + curb full; riders from Albany, El Cerrito,
@@ -157,10 +156,6 @@ window.PLAY = {
     },
   },
 
-  // Map points that aren't in js/geo.js (lat/lon).
-  mapPoints: {
-    westOakland: [37.8048, -122.2951],
-  },
 
   // ---------------- The strategies ----------------
   // access: drive | bike | ebike | transit (bus, or walk if close) | lyft

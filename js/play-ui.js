@@ -12,7 +12,7 @@
   // ---------------- state ----------------
   const st = {
     profile: JSON.parse(JSON.stringify(C.defaults)),
-    fee: C.ferry.lot.fee, fill: C.ferry.lot.fillMean,
+    fill: C.ferry.lot.fillMean,
     seed: (Date.now() % 100000) | 0,
     results: null, chosen: null, day: -1, playing: false, speed: 1,
     anim: null, // { legs, t0, dur, day }
@@ -21,14 +21,18 @@
   // ---------------- geometry ----------------
   const ll = ([lat, lon]) => [(lon - G.origin[0]) * G.mPerDegLon, (lat - G.origin[1]) * G.mPerDegLat];
   const PL = G.places;
+  const PG = window.PLAYGEO; // street routes and traced lines, from tools/build-play-geo.py
   const pt = {
     marina: PL.pierEnd, fb: PL.ferryBuilding, emb: PL.embarcaderoBart,
-    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, westOak: ll(C.mapPoints.westOakland),
-    i80u: ll([37.8686, -122.2985]), maze: ll([37.8290, -122.2930]), toll: ll([37.8255, -122.3080]), ybi: ll([37.8100, -122.3650]), anchor: ll([37.7880, -122.3900]),
+    civic: PL.civicCenterBart, fidi: PL.montgomeryBart,
   };
   const homePt = (id) => ll(C.homes[id].ll);
   const stationPt = (id) => ll(C.homes[id].station.ll);
   const destPt = () => pt[st.profile.dest];
+  const pierTail = [PL.pierFoot, PL.pierEnd];             // lot or bike rack to the end of the pier
+  const marketSt = () => (st.profile.dest === 'civic' ? [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic] : [pt.emb, pt.fidi]);
+  const tube = () => [...PG.transbay.slice(0, -1), ...marketSt()];
+  const toSF = () => [...PG.freeway.slice(1), ...PG.sfOff[st.profile.dest].slice(1, -1), destPt()];
 
   function keyPt(k) {
     if (k === 'home') return homePt(st.profile.home);
@@ -36,24 +40,23 @@
     if (k === 'dest') return destPt();
     return pt[k];
   }
+  // Every leg follows a real line: streets, tracks, the freeway and bridge, or the ferry lane.
   function legPath(L) {
-    const a = keyPt(L.from), b = keyPt(L.to);
-    const sfSide = (k) => k === 'dest' || k === 'fb';
-    let p;
-    if (L.mode === 'ferry') p = G.ferry.slice();
-    else if (L.mode === 'bart') {
-      const sf = st.profile.dest === 'civic' ? [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic] : [pt.emb, pt.fidi];
-      if (L.from === 'fb' || L.to === 'fb') p = [pt.fb, ...sf];
-      else p = [stationPt(st.profile.home), pt.westOak, ...sf];
-    } else if (L.mode === 'car' && (sfSide(L.from) || sfSide(L.to))) {
-      const e = L.from === 'dest' ? b : a; // the East Bay end
-      p = [e, pt.i80u, pt.maze, pt.toll, pt.ybi, pt.anchor, destPt()];
-    } else if (L.mode === 'car' && st.profile.home === 'hills' && [L.from, L.to].sort().join() === 'home,marina') {
-      p = G.routes.am.pts.slice(); // the cartoon's real street route
-    } else return [a, b];
-    // orient
-    const d0 = Math.hypot(p[0][0] - a[0], p[0][1] - a[1]), d1 = Math.hypot(p[p.length - 1][0] - a[0], p[p.length - 1][1] - a[1]);
-    return d0 <= d1 ? p : p.reverse();
+    const has = (k) => L.from === k || L.to === k;
+    const from = (k, p) => (L.from === k ? p : p.slice().reverse());   // p is drawn starting at k
+    const H = PG.homes[st.profile.home], stn = PG.stations[C.homes[st.profile.home].station.name];
+    const net = H[L.mode === 'car' || L.mode === 'bus' ? 'car' : 'bike'];
+    if (L.mode === 'ferry') return from('marina', G.ferry.slice());
+    if (L.mode === 'bart') return has('fb') ? from('fb', [pt.fb, ...marketSt()]) : from('station', [...stn.bart, ...tube().slice(1)]);
+    if (has('home') && has('dest')) return from('home', [...H.car.i80, ...toSF()]);
+    if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...PG.marinaI80, ...toSF()]);
+    if (has('home') && has('marina')) {
+      const p = L.mode === 'car' && st.profile.home === 'hills' ? G.routes.am.pts : net.marina; // hills: the cartoon's own drive
+      return from('home', [...p, ...pierTail]);
+    }
+    if (has('home') && has('station')) return from('home', net.station);
+    if (has('station') && has('marina')) return from('station', [...stn.marina, ...pierTail]);
+    return [keyPt(L.from), keyPt(L.to)];
   }
   const pathLen = (p) => p.slice(1).reduce((s, q, i) => s + Math.hypot(q[0] - p[i][0], q[1] - p[i][1]), 0);
   function along(p, f) {
@@ -111,11 +114,8 @@
     ctx.stroke();
     // transit lines
     poly(G.ferry, '#0b7a8f', 3, [7, 6]);
-    for (const id of new Set(Object.keys(C.homes).map((h) => C.homes[h].station.name))) {
-      const h = Object.keys(C.homes).find((k) => C.homes[k].station.name === id);
-      poly([stationPt(h), pt.westOak, pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic], 'rgba(29,111,184,0.55)', 4);
-    }
-    poly([pt.toll, pt.ybi, pt.anchor], 'rgba(120,110,90,0.7)', 3);
+    poly([...PG.bartLine, ...tube().slice(1)], 'rgba(29,111,184,0.55)', 4);
+    poly(PG.bridge, 'rgba(120,110,90,0.7)', 3);
     const L = (lat, lon, s, size, col) => { const q = ll([lat, lon]); text(s, view.sx(q[0]), view.sy(q[1]), size, { color: col || '#6d6046', weight: 800 }); };
     L(37.762, -122.405, 'San Francisco', 15); L(37.861, -122.262, 'Berkeley', 15);
     L(37.812, -122.272, 'Oakland', 14); L(37.823, -122.371, 'Treasure Is.', 11); L(37.822, -122.334, 'Bay Bridge', 11, '#5a5446');
@@ -219,7 +219,6 @@
     seg($('schedSeg'), [['steady', 'Predictable'], ['normal', 'Normal'], ['chaotic', 'All over the place']], p.schedule, (v) => { p.schedule = v; renderSetup(); });
     $('hasCar').checked = !!p.has.car; $('hasBike').checked = !!p.has.bike; $('hasEbike').checked = !!p.has.ebike; $('kids').checked = !!p.kids;
     $('rainLyft').checked = !!p.rainLyft;
-    $('fee').value = st.fee; $('feeOut').textContent = '$' + st.fee;
     $('vot').value = p.vot; $('votOut').textContent = '$' + p.vot;
     draw(performance.now());
   }
@@ -235,14 +234,13 @@
     $('hasEbike').onchange = (e) => { st.profile.has.ebike = e.target.checked; };
     $('kids').onchange = (e) => { st.profile.kids = e.target.checked; };
     $('rainLyft').onchange = (e) => { st.profile.rainLyft = e.target.checked; };
-    $('fee').oninput = (e) => { st.fee = +e.target.value; $('feeOut').textContent = '$' + st.fee; };
     $('vot').oninput = (e) => { st.profile.vot = +e.target.value; $('votOut').textContent = '$' + st.profile.vot; };
     $('toPick').onclick = () => { applyTweaks(); show('pick'); renderPick(); };
     $('backSetup').onclick = () => show('setup');
     $('again').onclick = () => { stop(); show('setup'); };
     renderSetup();
   }
-  function applyTweaks() { C.ferry.lot.fee = st.fee; C.ferry.lot.fillMean = st.fill; }
+  function applyTweaks() { C.ferry.lot.fillMean = st.fill; }
 
   // ---------------- step 2: pick ----------------
   function renderPick() {
@@ -373,5 +371,8 @@
 
   // ?auto=STRATEGY_ID jumps straight to a month (handy for screenshots/tests)
   const q = new URLSearchParams(location.search);
-  if (q.get('auto')) { applyTweaks(); startMonth(q.get('auto')); if (q.get('results')) finish(); }
+  if (q.get('seed')) st.seed = +q.get('seed');
+  if (C.homes[q.get('home')]) st.profile.home = q.get('home');
+  if (C.dests[q.get('dest')]) st.profile.dest = q.get('dest');
+  if (q.get('auto')) { applyTweaks(); startMonth(q.get('auto')); if (q.get('results')) finish(); else if (q.get('day')) { stop(); showDay(+q.get('day') - 1, true); st.anim.t0 = -1e9; } }
 })();

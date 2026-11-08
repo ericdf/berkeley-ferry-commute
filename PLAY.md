@@ -2,7 +2,7 @@
 
 A companion to the cartoon. The cartoon tells one story. This page lets the viewer choose their own: where they live, when they work, what they own, how messy their days are. Then it plays 21 workdays and scores every way of getting to San Francisco against **the same month of luck**.
 
-Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps straight into a month with that strategy. Add `&results=1` to skip to the scorecard.
+Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps straight into a month with that strategy. Add `&results=1` to skip to the scorecard, or `&day=N` to show one day's map. `home=`, `dest=` and `seed=` fix the rest.
 
 ## Files
 
@@ -12,6 +12,8 @@ Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps 
 | `js/play-config.js` | **Every number.** Homes, legs, fares, ferry schedule, parking, life-event odds. Each value is tagged `[input]`, `[scenario]`, `[estimate]` or `[map]` |
 | `js/play-sim.js` | Pure simulation, no DOM. Runs in node (see the header comment) |
 | `js/play-ui.js` | Form, map drawing (reuses `js/geo.js`), day playback, scorecard |
+| `js/play-geo.js` | **Generated** map lines: street routes for each home, BART track, I-80 and the Bay Bridge |
+| `tools/build-play-geo.py` | Builds `js/play-geo.js` (usage at the top of the file) |
 | `css/play.css` | Layered on `css/style.css` |
 
 ## How the simulation works
