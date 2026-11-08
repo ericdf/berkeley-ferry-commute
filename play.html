@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commuter Reality Check</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/play.css">
+</head>
+<body>
+<main class="play">
+  <header class="ptitle">
+    <h1>Commuter Reality Check</h1>
+    <p>Pick where you live and how you'd get to work in San Francisco. Then live 21 workdays: late mornings, late meetings, rain, full parking lots. Every option gets the same month of luck, so you can compare fairly.</p>
+  </header>
+
+  <div class="playgrid">
+    <div class="mapwrap">
+      <canvas id="map" aria-label="Map of Berkeley and San Francisco. Tap a house to choose where you live."></canvas>
+      <div id="hudbar" hidden>
+        <span id="hDay">Day 1</span>
+        <span id="hCost">$0</span>
+        <span id="hHours">0 h</span>
+        <span id="hLate">0 late</span>
+        <span id="hBad"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <!-- STEP 1: your life -->
+      <section id="setup">
+        <h2>1 · Your life</h2>
+        <div class="field"><span class="flabel">I live in</span><div class="seg" id="homeSeg"></div></div>
+        <div class="field"><span class="flabel">I work near</span><div class="seg" id="destSeg"></div></div>
+        <div class="field row2">
+          <label>Be at work by <select id="arrive"></select></label>
+          <label>Leave work at <select id="leave"></select></label>
+        </div>
+        <div class="field"><label class="strict"><input type="checkbox" id="strict"> I can never be late</label></div>
+        <div class="field"><span class="flabel">I have</span>
+          <div class="checks">
+            <label><input type="checkbox" id="hasCar"> a car</label>
+            <label><input type="checkbox" id="hasBike"> a bike</label>
+            <label><input type="checkbox" id="hasEbike"> an e-bike</label>
+            <label><input type="checkbox" id="kids"> kids in school</label>
+            <label><input type="checkbox" id="bikeAlong"> my bike rides BART or the ferry with me</label>
+          </div>
+        </div>
+        <div class="field"><span class="flabel">My workdays are</span><div class="seg" id="schedSeg"></div></div>
+        <details class="tweaks">
+          <summary>Change the assumptions</summary>
+          <label>Ferry lot is usually full by <select id="fill"></select></label>
+          <label>An hour of my time is worth <output id="votOut"></output><input type="range" id="vot" min="0" max="75" step="5"></label>
+          <label><input type="checkbox" id="rainLyft"> When it rains, I take a Lyft instead of biking</label>
+        </details>
+        <button id="toPick" class="big">Choose my commute →</button>
+      </section>
+
+      <!-- STEP 2: pick a strategy -->
+      <section id="pick" hidden>
+        <h2>2 · How will you get there?</h2>
+        <p class="note">Times and costs below are for a day when nothing goes wrong. Ferry options use the <b>proposed</b> Berkeley ferry, which doesn't run yet.</p>
+        <div id="cards"></div>
+        <button id="backSetup" class="ghost">← Change my life</button>
+      </section>
+
+      <!-- STEP 3: the month -->
+      <section id="month" hidden>
+        <h2 id="mTitle">3 · Your month</h2>
+        <div id="cal" aria-label="The month, one square per workday"></div>
+        <div id="dayCard" aria-live="polite"></div>
+        <div class="mctl">
+          <button id="mPlay">❚❚ Pause</button>
+          <label>Speed <select id="mSpeed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+          <button id="mSkip">Skip to the results →</button>
+        </div>
+      </section>
+
+      <!-- STEP 4: results -->
+      <section id="results" hidden>
+        <h2>4 · How the month went</h2>
+        <div id="verdict"></div>
+        <div id="board"></div>
+        <p class="note">Tap any row to replay <b>the same month</b> with that option.</p>
+        <div class="rbtns">
+          <button id="newMonth">🎲 New month, new luck</button>
+          <button id="again" class="ghost">← Change my life</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <details>
+    <summary>The numbers behind it</summary>
+    <div id="assump"></div>
+  </details>
+  <p class="foot">Also see <a href="https://ericdf.github.io/berkeley-ferry-commute/">The Ferry Commute</a>, the cartoon. © 2026 Eric Friedman · MIT. Shoreline © OpenStreetMap contributors; streets: City of Berkeley.</p>
+</main>
+<script src="js/geo.js"></script>
+<script src="js/play-geo.js"></script>
+<script src="js/play-config.js"></script>
+<script src="js/play-sim.js"></script>
+<script src="js/play-ui.js"></script>
+</body>
+</html>
