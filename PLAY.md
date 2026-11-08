@@ -33,7 +33,8 @@ Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps 
 
 - **Leg times are estimates**, in `PLAY.homes`. Better: compute them from the street graph in `js/geo.js`, the way the cartoon does its routes.
 - **Bus timetables are synthetic.** Departures run at :07 + k × headway. Better: load the AC Transit GTFS feed for the 65, 51B and others.
-- **Lot fill is one normal distribution** (default 7:25 ± 12 min). Better: derive it from stalls ÷ arrivals per boat, including riders from Albany, El Cerrito, Kensington and Emeryville.
+- **Lot fill times are derived, not typed in** (bottom of `js/play-config.js`). The ferry lot fills from cars per minute: Berkeley drivers, drivers from El Cerrito, Richmond, Albany, Kensington and Emeryville, and BART parkers displaced from North Berkeley and Ashby. The BART lots use the BART Board caps for the housing projects (North Berkeley 700 → 200 spaces, Ashby 535 → 85), and fill proportionally sooner than they do today.
+- **Ferry verdict.** The results test the ferry against 10 months of luck × 5 values of time ($0–$75/h). If no ferry option is ever best, they say so at the top. They also compare morning seats (8 boats × `seatsPerBoat`) with parking (lot + Marina Blvd) and name the first boat after the lot is full.
 - **No overnight logic.** A stranded car is rescued the same evening. Leaving it overnight and taking a Lyft back the next morning is another option.
 - **No Clipper transfer discount**, no monthly passes, no BayPass.
 - **Only six home presets.** Next step: tap anywhere on the map and route from there.

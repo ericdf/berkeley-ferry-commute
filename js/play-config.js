@@ -15,13 +15,15 @@ const ST = {
   dbk:   { name: 'Downtown Berkeley', ll: [37.8701, -122.2681], rideCivic: 25,
            fare: { civic: 5.30, fidi: 5.05 }, lot: null },               // [input] civic: 2026 BART fare table
   nbk:   { name: 'North Berkeley', ll: [37.8740, -122.2834], rideCivic: 27,
-           fare: { civic: 5.40, fidi: 5.15 }, lot: { fee: 3.00, fillMean: '7:35', fillSdMin: 10 } },
+           fare: { civic: 5.40, fidi: 5.15 }, lot: { fee: 3.00, stallsToday: 700, stalls: 200, fillToday: '7:35', fillSdMin: 10 } },  // [input] BART Board cap: 200 rider spaces after the housing
   ashby: { name: 'Ashby', ll: [37.8529, -122.2700], rideCivic: 23,
-           fare: { civic: 5.15, fidi: 4.90 }, lot: { fee: 3.00, fillMean: '7:30', fillSdMin: 10 } },
+           fare: { civic: 5.15, fidi: 4.90 }, lot: { fee: 3.00, stallsToday: 535, stalls: 85, fillToday: '7:30', fillSdMin: 10 } },   // [input] BART Board cap: 85 rider spaces after the housing
   ecp:   { name: 'El Cerrito Plaza', ll: [37.9030, -122.2990], rideCivic: 31,
-           fare: { civic: 5.70, fidi: 5.45 }, lot: { fee: 3.00, fillMean: '7:20', fillSdMin: 10 } }, // [input] civic fare
+           fare: { civic: 5.70, fidi: 5.45 }, lot: { fee: 3.00, fillToday: '7:20', fillSdMin: 10 } }, // [input] civic fare
 };
-// lots: [estimate] $3/day; fill times [scenario]
+// lots: [estimate] $3/day; today's fill times [scenario]. Cars arrive at a steady rate from firstCar,
+// so a lot with fewer stalls fills proportionally sooner (computed at the bottom of this file).
+const BART_FIRST_CAR = '5:30';            // [scenario] when commuters start filling BART lots
 
 window.PLAY = {
   days: 21,                                  // [scenario] workdays in a month
@@ -47,6 +49,7 @@ window.PLAY = {
     // Exact times below are [scenario] placements consistent with that plan.
     amFromBerkeley: ['6:30', '7:05', '7:40', '8:15', '8:50', '9:25', '10:30', '11:45'],
     pmFromSF: ['15:30', '16:05', '16:40', '17:15', '17:50', '18:25', '19:30', '20:30'],
+    seatsPerBoat: 400,                       // [estimate] WETA's current boats carry 400–445
     boardMin: 5, sailMin: 30, dockMin: 5,    // [scenario] same as the cartoon (js/config.js)
     fare: 6.74,                              // [input] WETA projected 2035 fare, each way
     pierWalkMin: 5,                          // [map] lot to the end of the 1,080-ft pier
@@ -58,8 +61,16 @@ window.PLAY = {
       fee: 8,                                // [input] all-day ferry parking, $8
       stalls: 265,                           // [input] City of Berkeley draft Parking Mgmt Plan, May 2026
       curb: 50,                              // [estimate] usable Marina Blvd curb; none on University west of I-80
-      fillMean: '7:25',                      // [scenario] lot + curb full; riders from Albany, El Cerrito,
-      fillSdMin: 12,                         //            Kensington, Emeryville compete for the same stalls
+      fillSdMin: 12,
+      // Who parks here, cars per minute once the first boat is coming. The lot + curb fill time is
+      // computed from these at the bottom of this file. [estimate]
+      firstCar: '6:00',
+      arrivals: {
+        berkeley: 1.6,                       // Berkeley ferry riders who drive
+        region: 1.4,                         // El Cerrito, Richmond, Albany, Kensington, Emeryville: the ferry is their closest boat
+      },
+      bartSpillShare: 0.10,                  // share of BART parkers who lose their North Berkeley / Ashby space and come here
+      bartSpillWindowMin: 120,               // ...spread over the morning rush
     },
   },
 
@@ -231,3 +242,24 @@ window.PLAY = {
     { id: 'drive_sf',          via: 'car',   access: 'drive', label: 'Drive into SF' },
   ],
 };
+
+// ---------------- Derived: when each lot fills ----------------
+(function () {
+  const T = (s) => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+  const H = (m) => { m = Math.round(m / 5) * 5; return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+  let displaced = 0;
+  for (const s of Object.values(ST)) {
+    const L = s.lot; if (!L) continue;
+    if (L.stallsToday) {
+      L.perMin = L.stallsToday / (T(L.fillToday) - T(BART_FIRST_CAR));      // today's arrival rate
+      L.fillMean = H(T(BART_FIRST_CAR) + L.stalls / L.perMin);              // same drivers, fewer stalls
+      displaced += L.stallsToday - L.stalls;
+    } else L.fillMean = L.fillToday;
+  }
+  const F = window.PLAY.ferry.lot;
+  F.arrivals.bartSpill = displaced * F.bartSpillShare / F.bartSpillWindowMin;
+  F.displaced = displaced;
+  F.perMin = Object.values(F.arrivals).reduce((a, b) => a + b, 0);
+  F.fillMean = H(T(F.firstCar) + (F.stalls + F.curb) / F.perMin);
+})();
+

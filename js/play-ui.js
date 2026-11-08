@@ -244,7 +244,7 @@
   function initSetup() {
     times($('arrive'), '7:30', '10:00', 15, st.profile.arrive);
     times($('leave'), '15:30', '19:00', 15, st.profile.leave);
-    times($('fill'), '6:45', '8:45', 10, st.fill);
+    times($('fill'), '6:30', '8:45', 5, st.fill);
     $('arrive').onchange = (e) => { st.profile.arrive = e.target.value; };
     $('leave').onchange = (e) => { st.profile.leave = e.target.value; };
     $('fill').onchange = (e) => { st.fill = e.target.value; };
@@ -344,6 +344,8 @@
   }
 
   // ---------------- step 4: results ----------------
+  // scenarios for the ferry verdict: months of luck × what an hour of your time is worth
+  const FERRY_CHECK = { months: 10, vot: [0, 10, 25, 50, 75] };
   function renderResults() {
     const strict = !!st.profile.strict;
     const R = st.results.slice().sort((a, b) => a.totals.combined - b.totals.combined);
@@ -351,7 +353,27 @@
     const best = (strict && onTime.length ? onTime : R)[0], mine = st.chosen, vot = st.profile.vot;
     const t = mine.totals;
     const flags = (x) => [x.lateDays ? `${x.lateDays} late${strict ? ' ✗' : ''}` : '', x.lotFull ? `${x.lotFull} lot full` : '', x.stranded ? `${x.stranded} stranded` : '', x.lyfts ? `${x.lyfts} Lyft` : ''].filter(Boolean).join(', ');
-    $('verdict').innerHTML = `<span class="vbig">${mine.label}: ${money0(t.cost)} and ${t.hours.toFixed(0)} hours this month.</span>` +
+    // Is the ferry ever the best choice for this life? Try many months of luck and many values of time.
+    const pickBest = (rows, v) => {
+      const pool = strict && rows.some((r) => !r.totals.lateDays) ? rows.filter((r) => !r.totals.lateDays) : rows;
+      return pool.reduce((a, r) => ((r.totals.cost + r.totals.hours * v) < (a.totals.cost + a.totals.hours * v) ? r : a));
+    };
+    let tries = 0, ferryWins = 0;
+    for (let k = 0; k < FERRY_CHECK.months; k++) {
+      const rows = k === 0 ? st.results : S.runAll(st.profile, (st.seed + 7919 * k) % 1000003);
+      for (const v of FERRY_CHECK.vot) { tries++; if (pickBest(rows, v).via === 'ferry') ferryWins++; }
+    }
+    const ferryLine = !st.results.some((r) => r.via === 'ferry') ? ''
+      : ferryWins === 0 ? `<span class="vferry no">There is no scenario in which the ferry is the better choice for you.</span>`
+      : `<span class="vferry yes">The ferry is your best choice in ${ferryWins} of ${tries} scenarios.</span>`;
+    // the mismatch: lots of boats, one small lot
+    const F = C.ferry, fill = T(F.lot.fillMean), boatsAM = F.amFromBerkeley.map(T);
+    const firstUnparked = boatsAM.find((b) => b > fill + F.parkMin + F.pierWalkMin + F.bufferMin);
+    const seatsLine = !st.results.some((r) => r.via === 'ferry') ? '' :
+      `<span class="vseats">${boatsAM.length} morning boats carry up to ${(boatsAM.length * F.seatsPerBoat).toLocaleString()} people. ` +
+      `The lot and Marina Blvd hold ${F.lot.stalls + F.lot.curb} cars and are usually full by ${fmt(fill)}` +
+      (firstUnparked ? `, before the ${fmt(firstUnparked)} boat. Every boat from then on is for people who didn't drive.` : '.') + `</span>`;
+    $('verdict').innerHTML = ferryLine + seatsLine + `<span class="vbig">${mine.label}: ${money0(t.cost)} and ${t.hours.toFixed(0)} hours this month.</span>` +
       `<span class="vhome">Home by <b>${fmt(t.homeTypical)}</b> on a typical day · latest <b>${fmt(t.homeLatest)}</b></span>` +
       `<span class="vwalk">${t.hours.toFixed(0)} hours counts every leg: ${Math.round(t.walkMin / C.days)} min a day on foot, ${Math.round(t.waitMin / C.days)} min waiting, and time at work before it starts.</span>` +
       (strict && t.lateDays ? `<span class="vlate">Late ${t.lateDays === 1 ? 'once' : t.lateDays + ' times'}, in a job where you can't be.</span>` : '') +
@@ -376,8 +398,8 @@
     const rows = [
       ['Ferry schedule (proposed)', `Berkeley → SF: ${C.ferry.amFromBerkeley.map((s) => fmt(T(s))).join(', ')}<br>SF → Berkeley: ${C.ferry.pmFromSF.map((s) => fmt(T(s))).join(', ')}`, 'WETA business plan: 8 AM and 8 PM peak trips, ~35-min headway; exact times illustrative'],
       ['Ferry trip', `${C.ferry.boardMin + C.ferry.sailMin + C.ferry.dockMin} min boarding to stepping off; fare $${C.ferry.fare}`, 'WETA projected 2035 fare'],
-      ['Ferry parking', `${C.ferry.lot.stalls} paid stalls + ~${C.ferry.lot.curb} on Marina Blvd; none on University west of I-80. Usually full by ${fmt(T(C.ferry.lot.fillMean))} (±${C.ferry.lot.fillSdMin} min). $${C.ferry.lot.fee}/day.`, 'Draft Parking Mgmt Plan (May 2026); fill time is a game assumption, shared with riders from Albany, El Cerrito and beyond'],
-      ['BART parking', [...new Map(Object.values(C.homes).flatMap((h) => [h.station, h.parkRide && h.parkRide.station]).filter((x) => x && x.lot).map((x) => [x.name, x])).values()].map((x) => `${x.name}: full by about ${fmt(T(x.lot.fillMean))}, $${x.lot.fee.toFixed(2)}/day`).join('; ') + '. Downtown Berkeley has no BART lot.', 'fill times: game assumptions'],
+      ['Ferry parking', `${C.ferry.lot.stalls} paid stalls + ~${C.ferry.lot.curb} on Marina Blvd; none on University west of I-80. $${C.ferry.lot.fee}/day. Usually full by ${fmt(T(C.ferry.lot.fillMean))} (±${C.ferry.lot.fillSdMin} min): cars per minute from Berkeley ${C.ferry.lot.arrivals.berkeley}, from El Cerrito, Richmond, Albany, Kensington and Emeryville ${C.ferry.lot.arrivals.region}, and ${C.ferry.lot.arrivals.bartSpill.toFixed(1)} BART parkers who lost their space (${Math.round(C.ferry.lot.bartSpillShare * 100)}% of the ${C.ferry.lot.displaced} spaces going away at North Berkeley and Ashby).`, 'stalls: draft Parking Mgmt Plan (May 2026); arrivals: estimates'],
+      ['BART parking', [...new Map(Object.values(C.homes).flatMap((h) => [h.station, h.parkRide && h.parkRide.station]).filter((x) => x && x.lot).map((x) => [x.name, x])).values()].map((x) => `${x.name}: ${x.lot.stalls ? `${x.lot.stalls} spaces (${x.lot.stallsToday} today), ` : ''}full by about ${fmt(T(x.lot.fillMean))}, $${x.lot.fee.toFixed(2)}/day`).join('; ') + '. Downtown Berkeley has no BART lot.', 'spaces: BART Board caps for the North Berkeley and Ashby housing; fill times: today\'s, scaled to the spaces left'],
       ['If the next boat is more than', `${C.ferry.maxWaitBeforeBart} min away, you take BART instead. If your car is at the Marina, you go back for it.`, 'game rule'],
       ['BART', `Fares (2026): ${Object.values(C.homes).map((h) => `${h.station.name} $${h.station.fare.civic.toFixed(2)}`).filter((v, i, a) => a.indexOf(v) === i).join(', ')} to Civic Center. Wait 0–${C.bart.waitMaxMin} min; ${Math.round(C.bart.delayP * 100)}% chance of a delay.`, '2026 fare table; some fares estimated'],
       ['Driving into SF', `Bay Bridge toll $${C.drive.toll} (westbound), garage $${C.dests.civic.garage}/day near Civic Center, $${C.drive.perMile}/mile. ${Math.round(C.drive.bridgeMessP * 100)}% chance of a bad bridge day.`, 'toll: 2026; garage and per-mile: estimates'],

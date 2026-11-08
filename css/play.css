@@ -71,6 +71,10 @@ button.ghost { background: transparent; color: var(--ink); border-color: var(--l
 #verdict .vbig { font-size: 1.25em; font-weight: 800; display: block; margin-bottom: 4px; }
 #verdict .vhome { font-size: 1.15em; display: block; margin-bottom: 6px; }
 #verdict .vhome b { font-size: 1.15em; color: #ffd166; }
+#verdict .vferry { display: block; margin: 0 0 10px; padding: 10px 14px; border-radius: 10px; font-size: 1.3em; font-weight: 900; line-height: 1.25; }
+#verdict .vferry.no { background: #ffd166; color: #1d2230; border: 3px solid #1d2230; }
+#verdict .vferry.yes { background: rgba(11, 122, 143, 0.25); border: 2px solid #0b7a8f; }
+#verdict .vseats { display: block; margin: 0 0 10px; font-weight: 700; }
 #verdict .vwalk { display: block; margin-bottom: 6px; font-size: 0.9em; opacity: 0.8; }
 #verdict .vlate { display: block; margin-bottom: 6px; color: #ff7a66; font-weight: 800; }
 #board .home { white-space: nowrap; font-variant-numeric: tabular-nums; }
