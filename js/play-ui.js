@@ -24,13 +24,16 @@
   const PG = window.PLAYGEO; // street routes and traced lines, from tools/build-play-geo.py
   const pt = {
     marina: PL.pierEnd, fb: PL.ferryBuilding, emb: PL.embarcaderoBart,
-    civic: PL.civicCenterBart, fidi: PL.montgomeryBart,
+    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll),
   };
   const homePt = (id) => ll(C.homes[id].ll);
   const stationPt = (id) => ll(C.homes[id].station.ll);
   const destPt = () => pt[st.profile.dest];
   const pierTail = [PL.pierFoot, PL.pierEnd];             // lot or bike rack to the end of the pier
-  const marketSt = () => (st.profile.dest === 'civic' ? [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic] : [pt.emb, pt.fidi]);
+  const marketSt = () => ({ civic: [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic],
+    fidi: [pt.emb, pt.fidi], soma: [pt.emb, pt.soma] })[st.profile.dest];
+  // on foot from the Ferry Building: up Market to Montgomery, or down the Embarcadero and Folsom to SoMA
+  const ferryWalk = () => ({ fidi: [pt.fb, pt.emb, pt.fidi], soma: [pt.fb, ll([37.7905, -122.3890]), pt.soma] })[st.profile.dest] || [pt.fb, destPt()];
   const tube = () => [...PG.transbay.slice(0, -1), ...marketSt()];
   const toSF = () => [...PG.freeway.slice(1), ...PG.sfOff[st.profile.dest].slice(1, -1), destPt()];
 
@@ -47,6 +50,7 @@
     const H = PG.homes[st.profile.home], stn = PG.stations[C.homes[st.profile.home].station.name];
     const net = H[L.mode === 'car' || L.mode === 'bus' ? 'car' : 'bike'];
     if (L.mode === 'ferry') return from('marina', G.ferry.slice());
+    if (L.mode === 'walk' && has('fb')) return from('fb', ferryWalk());
     if (L.mode === 'bart') return has('fb') ? from('fb', [pt.fb, ...marketSt()]) : from('station', [...stn.bart, ...tube().slice(1)]);
     if (has('home') && has('dest')) return from('home', [...H.car.i80, ...toSF()]);
     if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...PG.marinaI80, ...toSF()]);
@@ -114,7 +118,7 @@
     ctx.stroke();
     // transit lines
     poly(G.ferry, '#0b7a8f', 3, [7, 6]);
-    poly([...PG.bartLine, ...tube().slice(1)], 'rgba(29,111,184,0.55)', 4);
+    poly([...PG.bartLine, ...PG.transbay.slice(1, -1), pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic], 'rgba(29,111,184,0.55)', 4);
     poly(PG.bridge, 'rgba(120,110,90,0.7)', 3);
     const L = (lat, lon, s, size, col) => { const q = ll([lat, lon]); text(s, view.sx(q[0]), view.sy(q[1]), size, { color: col || '#6d6046', weight: 800 }); };
     L(37.762, -122.405, 'San Francisco', 15); L(37.861, -122.262, 'Berkeley', 15);

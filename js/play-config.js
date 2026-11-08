@@ -68,6 +68,13 @@ window.PLAY = {
       garage: 38,                            // [estimate]
       driveAdjMin: -3,
     },
+    soma: {                                  // 2nd & Folsom: the Google, Salesforce and startup blocks
+      label: 'SoMA', fareKey: 'fidi', bartRideAdj: -7, bartWalkMin: 11,   // Embarcadero station, then walk
+      ferryEgressMin: 16, ferryEgressFare: 0, // [map] Ferry Bldg down the Embarcadero and Folsom, ~0.8 mi
+      garage: 32,                            // [estimate]
+      driveAdjMin: -5,                       // first exits off the bridge
+      ll: [37.7853, -122.3955],
+    },
   },
 
   // ---------------- Driving ----------------

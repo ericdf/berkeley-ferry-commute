@@ -253,7 +253,7 @@
           pay(F.fare + dest.ferryEgressFare);
           leg('marina', 'fb', 'ferry', 'am');
           clock = boat + x.ferryLeg + dest.ferryEgressMin;
-          if (dest.ferryEgressFare) leg('fb', 'dest', 'bart', 'am');
+          leg('fb', 'dest', dest.ferryEgressFare ? 'bart' : 'walk', 'am');
         }
       }
     }
@@ -302,7 +302,7 @@
       } else {
         if (boat - atFB > 15) say(atFB, `Wait ${Math.round(boat - atFB)} min for the ${fmt(boat)} boat.`);
         pay(F.fare + dest.ferryEgressFare);
-        if (dest.ferryEgressFare) leg('dest', 'fb', 'bart', 'pm');
+        leg('dest', 'fb', dest.ferryEgressFare ? 'bart' : 'walk', 'pm');
         leg('fb', 'marina', 'ferry', 'pm');
         clock = boat + x.ferryLeg;
         if (s.access === 'drive') {
