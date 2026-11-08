@@ -230,6 +230,18 @@ window.PLAY = {
                   am: [['6:16', '6:50'], ['7:58', '8:30']], pm: [['16:30', '17:28'], ['18:30', '19:18']] },
       driveSF: { min: 35, miles: 13 },
     },
+    sixth: {
+      label: 'West Berkeley', sub: '6th & University', ll: [37.86799, -122.29766],
+      station: { ...ST.dbk, rescueLyft: { min: 10, cost: 14 } },
+      toStation: { walk: 35, bike: [11, 11], ebike: [8, 8],
+                   bus: { name: 'AC Transit 51B', ride: 12, headway: 15, fare: 2.50 }, lyft: { min: 7, cost: 12 } },
+      toMarina:  { walk: 28, bike: [8, 8], ebike: [6, 6], bus: null,                     // over the I-80 bike/ped bridge
+                   lyft: { min: 5, cost: 10 }, drive: { min: 5, miles: 1.2 } },
+      parkRide: { station: ST.nbk, drive: { min: 6, miles: 1.3 } },
+      driveSF: { min: 28, miles: 11 },
+      transbay: { line: 'FS', stop: 'University & 6th', ll: [37.86970, -122.29850], walk: 2,   // FS times + minutes to this stop
+                  am: [['6:27', '6:50'], ['8:09', '8:30']], pm: [['16:30', '17:15'], ['18:30', '19:05']] },
+    },
     central: {
       label: 'Central Berkeley', sub: 'Dwight & Bonar', ll: [37.86159, -122.28581],
       station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
