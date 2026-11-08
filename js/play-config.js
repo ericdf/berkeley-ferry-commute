@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================================
-// PLAY A MONTH — every number the game uses lives here.
+// COMMUTER REALITY CHECK — every number the game uses lives here.
 // js/play-sim.js reads this object; nothing in the sim or UI is typed in by hand.
 //
 //   [input]     a published price/figure (source noted)
@@ -18,10 +18,13 @@ window.PLAY = {
     arrive: '9:00', leave: '17:30',
     has: { car: true, bike: false, ebike: true },
     kids: true,
+    strict: false,                           // a job where you can never be late
     schedule: 'normal',                      // steady | normal | chaotic
     vot: 25,                                 // [scenario] $ per hour of your time
     rainLyft: true,                          // cyclists take a Lyft when it rains
   },
+
+  strictCushionMin: 30,                      // [scenario] can't-be-late: plan to be at work this early
 
   // ---------------- The ferry (proposed) ----------------
   ferry: {
@@ -49,6 +52,7 @@ window.PLAY = {
   // ---------------- BART ----------------
   bart: {
     stationMin: 3,                           // [scenario] street to platform, each end
+    bikeParkMin: 2,                          // [scenario] lock or unlock the bike at the station
     waitMaxMin: 10,                          // [scenario] wait is uniform 0..this
     delayP: 0.05, delayMin: [10, 25],        // [estimate] chance per trip of a meaningful delay
     fbToEmbarcaderoMin: 8,                   // [map] Ferry Building to Embarcadero platform
@@ -58,7 +62,7 @@ window.PLAY = {
   dests: {
     civic: {
       label: 'Civic Center', fareKey: 'civic', bartRideAdj: 0, bartWalkMin: 4,
-      ferryEgressMin: 27, ferryEgressFare: 2.55, // [scenario] FB→Embarcadero→BART→Civic Center (cartoon legs); [input] 2026 fare
+      ferryEgressMin: 27, ferryEgressWalkMin: 10, ferryEgressFare: 2.55, // [scenario] FB→Embarcadero→BART→Civic Center (cartoon legs); [input] 2026 fare
       garage: 30,                            // [estimate] all-day garage near Civic Center
       driveAdjMin: 0,
     },
@@ -74,6 +78,14 @@ window.PLAY = {
       garage: 32,                            // [estimate]
       driveAdjMin: -5,                       // first exits off the bridge
       ll: [37.7853, -122.3955],
+    },
+    mbay: {                                  // 3rd St at Chase Center: Uber, UCSF, the biotech blocks
+      label: 'Mission Bay', fareKey: 'civic', bartRideAdj: -2,             // Powell St station...
+      bartWalkMin: 24, bartFootMin: 9, bartEgressFare: 2.85, // ...then the Central Subway T to UCSF/Chase Center. [input] Muni $2.85
+      ferryEgressMin: 30, ferryEgressWalkMin: 10, ferryEgressFare: 2.85, ferryEgressMode: 'muni',  // Muni from Embarcadero down King St
+      garage: 28,                            // [estimate]
+      driveAdjMin: -2,                       // I-80 to the 4th St exit
+      ll: [37.7680, -122.3893],
     },
   },
 

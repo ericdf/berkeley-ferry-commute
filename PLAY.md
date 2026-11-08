@@ -1,4 +1,4 @@
-# Play a Month — handoff notes
+# Commuter Reality Check — handoff notes
 
 A companion to the cartoon. The cartoon tells one story. This page lets the viewer choose their own: where they live, when they work, what they own, how messy their days are. Then it plays 21 workdays and scores every way of getting to San Francisco against **the same month of luck**.
 
@@ -19,14 +19,14 @@ Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps 
 ## How the simulation works
 
 1. **Luck is drawn once per month** (`drawLuck`, seeded). Every random number is drawn in a fixed order whether or not it gets used, so changing one setting never reshuffles the rest. Each day has: running late (5–15 min), a late meeting (45–120 min), the school calling (leave 12:30–3:00), rain, the time the ferry lot fills, BART wait and delay, bus lateness, Lyft surge, and bridge traffic.
-2. **Each strategy plans like a sensible person.** It works backward from "be at work by" to a leave time. Ferry riders pick the latest boat that gets them there on time; the "one boat early" variant takes the boat before that to beat the parking.
+2. **Each strategy plans like a sensible person.** It works backward from "be at work by" to a leave time. With **"I can never be late"** checked, it plans to arrive `strictCushionMin` (30) minutes early, and the results pick the best option that was never late. Ferry riders pick the latest boat that gets them there on time; the "one boat early" variant takes the boat before that to beat the parking.
 3. **Then the day plays forward** with that day's luck, and the consequences fall out of it:
    - You arrive at the Marina after the lot fills, so you drive into SF (toll plus garage).
    - You miss the planned boat, so you wait about 35 minutes.
    - You get out at 1:30 PM, or after the last boat, or the next boat is more than 45 min off: you take BART home. **If your car is at the Marina, you Lyft back for it** (the stranded car).
    - The bus is too far off, or service has ended: Lyft.
    - It rains: cyclists Lyft, or ride wet (the user decides).
-4. **Scoring:** money, door-to-door hours, late-to-work days, lot-full days, stranded cars, Lyft count. "Total" is money plus hours × the user's value of time.
+4. **Scoring:** money, hours (every leg, every minute on foot, waits, and time at work before it starts), when you get home (typical = median, and the latest), late-to-work days, lot-full days, stranded cars, Lyft count. "Total" is money plus hours × the user's value of time.
 
 ## Known simplifications and next steps
 

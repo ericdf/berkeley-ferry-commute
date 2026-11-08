@@ -1,4 +1,4 @@
-/* Play a Month — layered on css/style.css (same palette and buttons) */
+/* Commuter Reality Check — layered on css/style.css (same palette and buttons) */
 .play .ptitle h1 { margin: 4px 0 2px; font-size: clamp(28px, 5vw, 48px); }
 .play .ptitle p { margin: 0 0 12px; max-width: 760px; color: var(--muted); }
 
@@ -68,6 +68,13 @@ button.ghost { background: transparent; color: var(--ink); border-color: var(--l
 
 #verdict { font-size: 1.05em; margin-bottom: 10px; }
 #verdict .vbig { font-size: 1.25em; font-weight: 800; display: block; margin-bottom: 4px; }
+#verdict .vhome { font-size: 1.15em; display: block; margin-bottom: 6px; }
+#verdict .vhome b { font-size: 1.15em; color: #ffd166; }
+#verdict .vwalk { display: block; margin-bottom: 6px; font-size: 0.9em; opacity: 0.8; }
+#verdict .vlate { display: block; margin-bottom: 6px; color: #ff7a66; font-weight: 800; }
+#board .home { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#board th .sub { font-weight: 600; font-size: 0.8em; opacity: 0.75; }
+label.strict { font-weight: 800; }
 #board table { font-size: 14px; margin: 0 0 6px; }
 #board th { width: auto; font-size: 12px; color: var(--muted); }
 #board td, #board th { padding: 4px 6px; }

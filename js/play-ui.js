@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================================
-// PLAY A MONTH — interface: setup form, map, day-by-day playback, scorecard.
+// COMMUTER REALITY CHECK — interface: setup form, map, day-by-day playback, scorecard.
 // All numbers come from js/play-config.js via js/play-sim.js.
 // ============================================================================
 (function () {
@@ -24,16 +24,19 @@
   const PG = window.PLAYGEO; // street routes and traced lines, from tools/build-play-geo.py
   const pt = {
     marina: PL.pierEnd, fb: PL.ferryBuilding, emb: PL.embarcaderoBart,
-    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll),
+    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll), mbay: ll(C.dests.mbay.ll),
   };
   const homePt = (id) => ll(C.homes[id].ll);
   const stationPt = (id) => ll(C.homes[id].station.ll);
   const destPt = () => pt[st.profile.dest];
   const pierTail = [PL.pierFoot, PL.pierEnd];             // lot or bike rack to the end of the pier
   const marketSt = () => ({ civic: [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic],
-    fidi: [pt.emb, pt.fidi], soma: [pt.emb, pt.soma] })[st.profile.dest];
+    fidi: [pt.emb, pt.fidi], soma: [pt.emb, pt.soma],
+    mbay: [pt.emb, PL.montgomeryBart, PL.powellBart, ...[[37.7843, -122.4020], [37.7775, -122.3965], [37.7762, -122.3945], [37.7705, -122.3905]].map(ll), pt.mbay] })[st.profile.dest];
   // on foot from the Ferry Building: up Market to Montgomery, or down the Embarcadero and Folsom to SoMA
-  const ferryWalk = () => ({ fidi: [pt.fb, pt.emb, pt.fidi], soma: [pt.fb, ll([37.7905, -122.3890]), pt.soma] })[st.profile.dest] || [pt.fb, destPt()];
+  // Muni from Embarcadero along the waterfront and King St to Mission Bay; BART to Civic Center
+  const ferryEgress = () => ({ fidi: [pt.fb, pt.emb, pt.fidi], soma: [pt.fb, ll([37.7905, -122.3890]), pt.soma], civic: [pt.fb, ...marketSt()],
+    mbay: [pt.fb, pt.emb, ...[[37.7900, -122.3890], [37.7860, -122.3880], [37.7790, -122.3893], [37.7762, -122.3945], [37.7705, -122.3905]].map(ll), pt.mbay] })[st.profile.dest];
   const tube = () => [...PG.transbay.slice(0, -1), ...marketSt()];
   const toSF = () => [...PG.freeway.slice(1), ...PG.sfOff[st.profile.dest].slice(1, -1), destPt()];
 
@@ -50,8 +53,8 @@
     const H = PG.homes[st.profile.home], stn = PG.stations[C.homes[st.profile.home].station.name];
     const net = H[L.mode === 'car' || L.mode === 'bus' ? 'car' : 'bike'];
     if (L.mode === 'ferry') return from('marina', G.ferry.slice());
-    if (L.mode === 'walk' && has('fb')) return from('fb', ferryWalk());
-    if (L.mode === 'bart') return has('fb') ? from('fb', [pt.fb, ...marketSt()]) : from('station', [...stn.bart, ...tube().slice(1)]);
+    if (has('fb') && L.mode !== 'ferry') return from('fb', ferryEgress());
+    if (L.mode === 'bart') return from('station', [...stn.bart, ...tube().slice(1)]);
     if (has('home') && has('dest')) return from('home', [...H.car.i80, ...toSF()]);
     if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...PG.marinaI80, ...toSF()]);
     if (has('home') && has('marina')) {
@@ -75,13 +78,13 @@
 
   // ---------------- map drawing ----------------
   const cv = $('map'), ctx = cv.getContext('2d');
-  const MODE_COL = { car: '#e8562a', bike: '#2a9d4b', ebike: '#2a9d4b', walk: '#6b6455', bus: '#8e44ad', bart: '#1d6fb8', ferry: '#0b7a8f' };
+  const MODE_COL = { car: '#e8562a', bike: '#2a9d4b', ebike: '#2a9d4b', walk: '#6b6455', bus: '#8e44ad', bart: '#1d6fb8', ferry: '#0b7a8f', muni: '#b8336a' };
   let view = null;
 
   function fitView() {
     const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
     cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-    const pts = [pt.civic, pt.fb, pt.marina, ...Object.keys(C.homes).map(homePt), ...Object.keys(C.homes).map(stationPt)];
+    const pts = [...Object.keys(C.dests).map((k) => pt[k]), pt.fb, pt.marina, ...Object.keys(C.homes).map(homePt), ...Object.keys(C.homes).map(stationPt)];
     const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
     const pad = 1700;
     const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
@@ -120,8 +123,12 @@
     poly(G.ferry, '#0b7a8f', 3, [7, 6]);
     poly([...PG.bartLine, ...PG.transbay.slice(1, -1), pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic], 'rgba(29,111,184,0.55)', 4);
     poly(PG.bridge, 'rgba(120,110,90,0.7)', 3);
-    const L = (lat, lon, s, size, col) => { const q = ll([lat, lon]); text(s, view.sx(q[0]), view.sy(q[1]), size, { color: col || '#6d6046', weight: 800 }); };
-    L(37.762, -122.405, 'San Francisco', 15); L(37.861, -122.262, 'Berkeley', 15);
+    const L = (lat, lon, s, size, col) => {
+      const q = ll([lat, lon]), half = (s.length * size * 0.33 + 6) * view.dpr;      // keep the whole word on the map
+      const x = Math.min(Math.max(view.sx(q[0]), half), cv.width - half);
+      text(s, x, view.sy(q[1]), size, { color: col || '#6d6046', weight: 800 });
+    };
+    L(37.8035, -122.428, 'San Francisco', 15); L(37.861, -122.262, 'Berkeley', 15);
     L(37.812, -122.272, 'Oakland', 14); L(37.823, -122.371, 'Treasure Is.', 11); L(37.822, -122.334, 'Bay Bridge', 11, '#5a5446');
   }
 
@@ -221,7 +228,7 @@
     seg($('homeSeg'), Object.entries(C.homes).map(([k, h]) => [k, h.label, h.sub]), p.home, (v) => { p.home = v; renderSetup(); });
     seg($('destSeg'), Object.entries(C.dests).map(([k, d]) => [k, d.label]), p.dest, (v) => { p.dest = v; renderSetup(); });
     seg($('schedSeg'), [['steady', 'Predictable'], ['normal', 'Normal'], ['chaotic', 'All over the place']], p.schedule, (v) => { p.schedule = v; renderSetup(); });
-    $('hasCar').checked = !!p.has.car; $('hasBike').checked = !!p.has.bike; $('hasEbike').checked = !!p.has.ebike; $('kids').checked = !!p.kids;
+    $('hasCar').checked = !!p.has.car; $('hasBike').checked = !!p.has.bike; $('hasEbike').checked = !!p.has.ebike; $('kids').checked = !!p.kids; $('strict').checked = !!p.strict;
     $('rainLyft').checked = !!p.rainLyft;
     $('vot').value = p.vot; $('votOut').textContent = '$' + p.vot;
     draw(performance.now());
@@ -237,6 +244,7 @@
     $('hasBike').onchange = (e) => { st.profile.has.bike = e.target.checked; };
     $('hasEbike').onchange = (e) => { st.profile.has.ebike = e.target.checked; };
     $('kids').onchange = (e) => { st.profile.kids = e.target.checked; };
+    $('strict').onchange = (e) => { st.profile.strict = e.target.checked; };
     $('rainLyft').onchange = (e) => { st.profile.rainLyft = e.target.checked; };
     $('vot').oninput = (e) => { st.profile.vot = +e.target.value; $('votOut').textContent = '$' + st.profile.vot; };
     $('toPick').onclick = () => { applyTweaks(); show('pick'); renderPick(); };
@@ -298,7 +306,7 @@
     [...$('cal').children].forEach((b, k) => { b.className = 'dsq ' + (k <= lastShown ? dayClass(st.chosen.days[k]) : '') + (k === i ? ' now' : ''); });
     const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][i % 5];
     $('dayCard').innerHTML = `<h3>Day ${i + 1} · ${wd}</h3><ul>${d.ev.map((e) => `<li class="${e.kind}"><time>${fmt(e.t)}</time><span>${e.text}</span></li>`).join('')}</ul>
-      <div class="dsum">${Math.round(d.amMin)} min there · ${Math.round(d.pmMin)} min back · ${S.money(d.cost)}</div>`;
+      <div class="dsum">${Math.round(d.amMin)} min there${d.earlyMin >= 10 ? ` (+${Math.round(d.earlyMin)} early)` : ''} · ${Math.round(d.pmMin)} min back · ${Math.round(d.walkMin)} min on foot · ${S.money(d.cost)}</div>`;
     tallies(Math.max(i, lastShown));
     const legs = d.legs.map((L) => { const path = legPath(L); return { ...L, path, len: Math.max(1, pathLen(path)) }; });
     st.anim = { legs, total: legs.reduce((a, L) => a + L.len, 0), t0: performance.now(), dur: (still ? 900 : 2200) / st.speed, day: d };
@@ -328,21 +336,27 @@
 
   // ---------------- step 4: results ----------------
   function renderResults() {
+    const strict = !!st.profile.strict;
     const R = st.results.slice().sort((a, b) => a.totals.combined - b.totals.combined);
-    const best = R[0], mine = st.chosen, vot = st.profile.vot;
+    const onTime = R.filter((r) => !r.totals.lateDays);
+    const best = (strict && onTime.length ? onTime : R)[0], mine = st.chosen, vot = st.profile.vot;
     const t = mine.totals;
-    const flags = (x) => [x.lateDays ? `${x.lateDays} late` : '', x.lotFull ? `${x.lotFull} lot full` : '', x.stranded ? `${x.stranded} stranded` : '', x.lyfts ? `${x.lyfts} Lyft` : ''].filter(Boolean).join(', ');
+    const flags = (x) => [x.lateDays ? `${x.lateDays} late${strict ? ' ✗' : ''}` : '', x.lotFull ? `${x.lotFull} lot full` : '', x.stranded ? `${x.stranded} stranded` : '', x.lyfts ? `${x.lyfts} Lyft` : ''].filter(Boolean).join(', ');
     $('verdict').innerHTML = `<span class="vbig">${mine.label}: ${money0(t.cost)} and ${t.hours.toFixed(0)} hours this month.</span>` +
-      (best.id === mine.id ? `That was the best fit for your life, counting your time at $${vot}/hour.`
-        : `The best fit for your life was <b>${best.label}</b>: ${money0(best.totals.cost)} and ${best.totals.hours.toFixed(0)} hours. ` +
+      `<span class="vhome">Home by <b>${fmt(t.homeTypical)}</b> on a typical day · latest <b>${fmt(t.homeLatest)}</b></span>` +
+      `<span class="vwalk">${t.hours.toFixed(0)} hours counts every leg: ${Math.round(t.walkMin / C.days)} min a day on foot, waits, and time at work before it starts.</span>` +
+      (strict && t.lateDays ? `<span class="vlate">Late ${t.lateDays === 1 ? 'once' : t.lateDays + ' times'}, in a job where you can't be.</span>` : '') +
+      (best.id === mine.id ? `That was the best fit for your life${strict ? ' among the options that were never late' : ''}, counting your time at $${vot}/hour.`
+        : `The best fit for your life${strict && onTime.length ? ' that was never late' : ''} was <b>${best.label}</b>: ${money0(best.totals.cost)} and ${best.totals.hours.toFixed(0)} hours, home by ${fmt(best.totals.homeTypical)}. ` +
           `Counting your time at $${vot}/hour, that's <b>${money0(t.combined - best.totals.combined)}</b> a month better.`) +
       (flags(t) ? ` Your month: ${flags(t)}.` : '');
     const maxC = Math.max(...R.map((r) => r.totals.cost)), maxH = Math.max(...R.map((r) => r.totals.hours));
-    $('board').innerHTML = `<table><thead><tr><th>Option</th><th class="num">Money</th><th class="num">Hours</th><th class="hide-s">What went wrong</th><th class="num">Total at $${vot}/h</th></tr></thead><tbody>` +
+    $('board').innerHTML = `<table><thead><tr><th>Option</th><th class="num">Money</th><th class="num">Hours</th><th class="num">Home<div class="sub">usual · latest</div></th><th class="hide-s">What went wrong</th><th class="num">Total at $${vot}/h</th></tr></thead><tbody>` +
       R.map((r) => `<tr class="row${r.id === mine.id ? ' mine' : ''}" data-id="${r.id}">
         <td>${r.label}${r.via === 'ferry' ? ' <span title="proposed">⛴</span>' : ''}</td>
         <td class="num">${money0(r.totals.cost)}<div class="bar" style="width:${(100 * r.totals.cost / maxC).toFixed(0)}%"></div></td>
         <td class="num">${r.totals.hours.toFixed(0)}<div class="bar t" style="width:${(100 * r.totals.hours / maxH).toFixed(0)}%"></div></td>
+        <td class="num home">${fmt(r.totals.homeTypical).replace(' PM', '')} · ${fmt(r.totals.homeLatest).replace(' PM', '')}</td>
         <td class="hide-s flag">${flags(r.totals)}</td>
         <td class="num"><b>${money0(r.totals.combined)}</b></td></tr>`).join('') + '</tbody></table>';
     [...$('board').querySelectorAll('tr.row')].forEach((tr) => { tr.onclick = () => { lastShown = -1; startMonth(tr.dataset.id); }; });
@@ -378,5 +392,6 @@
   if (q.get('seed')) st.seed = +q.get('seed');
   if (C.homes[q.get('home')]) st.profile.home = q.get('home');
   if (C.dests[q.get('dest')]) st.profile.dest = q.get('dest');
+  if (q.get('strict')) st.profile.strict = true;
   if (q.get('auto')) { applyTweaks(); startMonth(q.get('auto')); if (q.get('results')) finish(); else if (q.get('day')) { stop(); showDay(+q.get('day') - 1, true); st.anim.t0 = -1e9; } }
 })();

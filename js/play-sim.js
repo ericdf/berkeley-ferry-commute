@@ -1,6 +1,6 @@
 'use strict';
 // ============================================================================
-// PLAY A MONTH — the simulation. Pure functions, no DOM, so it runs in node too:
+// COMMUTER REALITY CHECK — the simulation. Pure functions, no DOM, so it runs in node too:
 //   node -e 'global.window={};require("./js/play-config.js");require("./js/play-sim.js");
 //            console.log(window.PlaySim.runAll(window.PLAY.defaults, 42).map(r=>[r.label,r.totals]))'
 //
@@ -80,6 +80,7 @@
     const home = C.homes[profile.home], dest = C.dests[profile.dest];
     return { C, home, dest, profile,
       target: T(profile.arrive), leaveWork: T(profile.leave),
+      plan: T(profile.arrive) - (profile.strict ? C.strictCushionMin : 0), // what you plan around
       bartRide: home.station.rideCivic + dest.bartRideAdj,
       bartFare: home.station.fare[dest.fareKey],
       ferryLeg: C.ferry.boardMin + C.ferry.sailMin + C.ferry.dockMin };
@@ -106,7 +107,10 @@
   // ---------- one day ----------
   function simDay(s, x, luck) {
     const { C, home, dest, profile } = x;
-    const d = { ev: [], legs: [], cost: 0, late: 0, stranded: false, lotFull: false, lyfts: 0, drove: false };
+    const d = { ev: [], legs: [], cost: 0, late: 0, stranded: false, lotFull: false, lyfts: 0, drove: false, walkMin: 0 };
+    const W = (m) => { d.walkMin += m; return m; };   // minutes on foot, counted in the day like any other leg
+    const part = (total, foot) => { W(foot); return total; };   // a leg that is partly on foot (walk + Muni)
+    const egressWalk = dest.ferryEgressWalkMin ?? dest.ferryEgressMin, bartFoot = dest.bartFootMin ?? dest.bartWalkMin;
     const say = (t, text, kind = 'info') => d.ev.push({ t, text, kind });
     const pay = (amt) => { d.cost += amt; };
     const leg = (from, to, mode, half) => d.legs.push({ from, to, mode, half });
@@ -130,13 +134,13 @@
         if (luck.rain && profile.rainLyft) return lyft(legs.lyft, clock, half, 'Raining. ', from, to);
         usedBike.v = true; leg(from, to, kind, half);
         if (luck.rain) say(clock, 'Raining. You ride anyway and arrive wet.', 'bad');
-        return clock + legs[kind][dir];
+        return clock + legs[kind][dir] + (place === 'station' ? C.bart.bikeParkMin : 0);  // lock or unlock at the station
       }
       if (kind === 'lyft') return lyft(legs.lyft, clock, half, '', from, to);
       const tc = transitChoice(legs);
-      if (tc.type === 'walk') { leg(from, to, 'walk', half); return clock + tc.min; }
+      if (tc.type === 'walk') { leg(from, to, 'walk', half); return clock + W(tc.min); }
       const bus = tc.bus;
-      clock += C.bus.walkToStopMin;
+      clock += W(C.bus.walkToStopMin);
       const dep = nextBus(clock, bus);
       if (dir && dep > T(C.bus.serviceEnds)) return lyft(legs.lyft, clock, half, `No ${bus.name} this late. `, from, to);
       if (dep - clock > (dir ? C.bus.pmMaxWaitMin : C.bus.maxWaitMin)) {
@@ -145,16 +149,16 @@
       const lateBy = Math.round(luck.busLate[dir]);
       if (lateBy) say(dep, `The ${bus.name} is ${lateBy} min late.`, 'bad');
       pay(bus.fare); leg(from, to, 'bus', half);
-      return dep + bus.ride + lateBy;
+      return dep + bus.ride + lateBy + (dir ? W(C.bus.walkToStopMin) : 0);  // evening: stop to front door
     };
 
     const bart = (clock, dir) => {
       const half = dir ? 'pm' : 'am';
-      clock += C.bart.stationMin + luck.bartWait[dir];
+      clock += W(C.bart.stationMin) + luck.bartWait[dir];
       const delay = Math.round(luck.bartDelay[dir]);
       if (delay) say(clock, `BART delay: ${delay} min.`, 'bad');
-      clock += x.bartRide + delay + C.bart.stationMin;
-      pay(x.bartFare);
+      clock += x.bartRide + delay + W(C.bart.stationMin);
+      pay(x.bartFare + (dest.bartEgressFare || 0));
       leg(dir ? 'dest' : 'station', dir ? 'station' : 'dest', 'bart', half);
       return clock;
     };
@@ -168,10 +172,10 @@
       say(clock, `Toll ${money(C.drive.toll)}, garage ${money(dest.garage)}.`);
       leg(fromMarina ? 'marina' : 'home', 'dest', 'car', 'am');
       d.drove = true;
-      return clock + C.drive.garageWalkMin;
+      return clock + W(C.drive.garageWalkMin);
     };
     const driveHomeFromSF = (clock) => {
-      clock += C.drive.garageWalkMin + home.driveSF.min + dest.driveAdjMin + luck.traffic[1];
+      clock += W(C.drive.garageWalkMin) + home.driveSF.min + dest.driveAdjMin + luck.traffic[1];
       if (luck.bridge[1]) { clock += luck.bridge[1]; say(clock, `Bridge traffic home: +${Math.round(luck.bridge[1])} min.`, 'bad'); }
       pay(home.driveSF.miles * C.drive.perMile);
       leg('dest', 'home', 'car', 'pm');
@@ -184,7 +188,7 @@
 
     if (s.via === 'ferry') {
       let i = boats.length - 1;
-      while (i > 0 && boats[i] + x.ferryLeg + dest.ferryEgressMin > x.target) i--;
+      while (i > 0 && boats[i] + x.ferryLeg + dest.ferryEgressMin > x.plan) i--;
       i = Math.max(0, i - (s.early || 0));
       plannedBoat = boats[i];
       const atPier = plannedBoat - F.bufferMin;
@@ -197,8 +201,8 @@
         else plannedLeave = lastBusBy(atPier - F.pierWalkMin - tc.bus.ride, tc.bus) - C.bus.walkToStopMin;
       }
     } else if (s.via === 'bart') {
-      const atStation = x.target - (dest.bartWalkMin + 2 * C.bart.stationMin + x.bartRide + 5) - 5;
-      if (s.access === 'bike' || s.access === 'ebike') plannedLeave = atStation - legsS[s.access][0];
+      const atStation = x.plan - (dest.bartWalkMin + 2 * C.bart.stationMin + x.bartRide + 5) - 5;
+      if (s.access === 'bike' || s.access === 'ebike') plannedLeave = atStation - legsS[s.access][0] - C.bart.bikeParkMin;
       else if (s.access === 'lyft') plannedLeave = atStation - legsS.lyft.min - C.lyft.waitMin;
       else {
         const tc = transitChoice(legsS);
@@ -206,7 +210,7 @@
         else plannedLeave = lastBusBy(atStation - tc.bus.ride, tc.bus) - C.bus.walkToStopMin;
       }
     } else {
-      plannedLeave = x.target - (home.driveSF.min + dest.driveAdjMin + 7 + C.drive.garageWalkMin) - 5;
+      plannedLeave = x.plan - (home.driveSF.min + dest.driveAdjMin + 7 + C.drive.garageWalkMin) - 5;
     }
     plannedLeave = Math.round(plannedLeave);
 
@@ -221,7 +225,7 @@
       clock = driveToSF(clock, false); carAt = 'sf';
     } else if (s.via === 'bart') {
       clock = access(s.access, legsS, clock, 0, 'station');
-      clock = bart(clock, 0) + dest.bartWalkMin;
+      clock = bart(clock, 0) + part(dest.bartWalkMin, bartFoot);
     } else {
       // --- to the Marina ---
       let toFerry = true;
@@ -235,25 +239,25 @@
         } else {
           pay(F.lot.fee); carAt = 'marina';
           say(clock, `Parked at the Marina: ${money(F.lot.fee)}.`);
-          clock += F.parkMin + F.pierWalkMin;
+          clock += F.parkMin + W(F.pierWalkMin);
         }
       } else {
         clock = access(s.access, legsM, clock, 0, 'marina');
-        clock += (s.access === 'bike' || s.access === 'ebike') && !(luck.rain && profile.rainLyft) ? F.bikeToPierMin : F.pierWalkMin;
+        clock += (s.access === 'bike' || s.access === 'ebike') && !(luck.rain && profile.rainLyft) ? F.bikeToPierMin : W(F.pierWalkMin);
       }
       if (toFerry) {
         const boat = boats.find((b) => b >= clock);
         if (boat == null) {
           say(clock, 'No more morning boats. Over to BART.', 'bad');
           clock = lyft(home.station.rescueLyft, clock, 'am', 'To BART: ', 'marina', 'station');
-          clock = bart(clock, 0) + dest.bartWalkMin;
+          clock = bart(clock, 0) + part(dest.bartWalkMin, bartFoot);
         } else {
           if (boat > plannedBoat) say(clock, `Missed the ${fmt(plannedBoat)} boat. Next one ${fmt(boat)}.`, 'bad');
           else if (boat - clock > 15) say(clock, `Waiting ${Math.round(boat - clock)} min for the ${fmt(boat)} boat.`);
           pay(F.fare + dest.ferryEgressFare);
           leg('marina', 'fb', 'ferry', 'am');
-          clock = boat + x.ferryLeg + dest.ferryEgressMin;
-          leg('fb', 'dest', dest.ferryEgressFare ? 'bart' : 'walk', 'am');
+          clock = boat + x.ferryLeg + part(dest.ferryEgressMin, egressWalk);
+          leg('fb', 'dest', dest.ferryEgressFare ? dest.ferryEgressMode || 'bart' : 'walk', 'am');
         }
       }
     }
@@ -262,6 +266,7 @@
     if (d.late > 2) say(atWork, `At work ${fmt(atWork)}: ${d.late} min late.`, 'bad');
     else say(atWork, `At work ${fmt(atWork)}.`, 'good');
     d.amMin = atWork - leftHome;
+    d.earlyMin = Math.max(0, x.target - atWork);   // there before work starts: still time the commute took
 
     // ================= EVENING =================
     let out = x.leaveWork;
@@ -281,20 +286,21 @@
     if (carAt === 'sf') {
       clock = driveHomeFromSF(clock);
     } else if (s.via === 'bart') {
-      clock = bart(clock + dest.bartWalkMin, 1);
+      clock = bart(clock + part(dest.bartWalkMin, bartFoot), 1);
       clock = homeFromStation();
     } else {
       const atFB = clock + dest.ferryEgressMin;
+      W(egressWalk);
       const boat = F.pmFromSF.map(T).find((b) => b >= atFB);
       if (boat == null || boat - atFB > F.maxWaitBeforeBart) {
         say(atFB, boat == null ? 'No boats left tonight. BART home.'
                                : `Next boat isn't until ${fmt(boat)}. BART home instead.`, 'bad');
-        clock = bart(clock + dest.bartWalkMin, 1);
+        clock = bart(clock + part(dest.bartWalkMin, bartFoot), 1);
         if (carAt === 'marina') {
           d.stranded = true;
           say(clock, 'Your car is still parked at the Marina. Go get it.', 'bad');
           clock = lyft(home.station.rescueLyft, clock, 'pm', 'Car rescue: ', 'station', 'marina');
-          clock += F.pierWalkMin + legsM.drive.min + luck.traffic[1] * 0.3;
+          clock += W(F.pierWalkMin) + legsM.drive.min + luck.traffic[1] * 0.3;
           leg('marina', 'home', 'car', 'pm');
         } else {
           clock = homeFromStation();
@@ -302,14 +308,14 @@
       } else {
         if (boat - atFB > 15) say(atFB, `Wait ${Math.round(boat - atFB)} min for the ${fmt(boat)} boat.`);
         pay(F.fare + dest.ferryEgressFare);
-        leg('dest', 'fb', dest.ferryEgressFare ? 'bart' : 'walk', 'pm');
+        leg('dest', 'fb', dest.ferryEgressFare ? dest.ferryEgressMode || 'bart' : 'walk', 'pm');
         leg('fb', 'marina', 'ferry', 'pm');
         clock = boat + x.ferryLeg;
         if (s.access === 'drive') {
-          clock += F.pierWalkMin + 2 + legsM.drive.min + luck.traffic[1] * 0.3;
+          clock += W(F.pierWalkMin) + 2 + legsM.drive.min + luck.traffic[1] * 0.3;
           leg('marina', 'home', 'car', 'pm');
         } else {
-          clock += (s.access === 'bike' || s.access === 'ebike') ? F.bikeToPierMin : F.pierWalkMin;
+          clock += (s.access === 'bike' || s.access === 'ebike') ? F.bikeToPierMin : W(F.pierWalkMin);
           clock = access(s.access, legsM, clock, 1, 'marina');
         }
       }
@@ -317,10 +323,12 @@
     if (usedBike.v) pay(C.bikePerDay[s.access] || 0);
     d.pmMin = clock - out;
     say(clock, `Home at ${fmt(clock)}.`, 'good');
-    d.totalMin = d.amMin + d.pmMin;
+    d.totalMin = d.amMin + d.earlyMin + d.pmMin;
     d.leave = leftHome; d.atWork = atWork; d.out = out; d.home = clock;
     return d;
   }
+
+  const median = (a) => { const s = a.slice().sort((p, q) => p - q), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
   function runStrategy(s, profile, luckDays) {
     const x = context(profile);
@@ -336,6 +344,8 @@
         lateDays: days.filter((d) => d.late > 2).length,
         stranded: sum('stranded'), lotFull: sum('lotFull'), lyfts: sum('lyfts'), drove: sum('drove'),
         goodDay: Math.min(...days.map((d) => d.totalMin)), badDay: Math.max(...days.map((d) => d.totalMin)),
+        walkMin: sum('walkMin'),
+        homeTypical: median(days.map((d) => d.home)), homeLatest: Math.max(...days.map((d) => d.home)),
       },
     };
   }
