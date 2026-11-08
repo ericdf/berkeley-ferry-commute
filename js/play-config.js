@@ -52,6 +52,7 @@ window.PLAY = {
     bikeAlong: true,                         // the bike rides BART or the ferry and you ride the SF end
   },
 
+  maxWalkMin: 45,                            // [scenario] longest walk that counts as a way to get somewhere
   strictCushionMin: 30,                      // [scenario] can't-be-late: plan to be at work this early
 
   // ---------------- The ferry (proposed) ----------------
@@ -198,7 +199,7 @@ window.PLAY = {
       toStation: { walk: null, bike: [14, 40], ebike: [12, 20],
                    bus: { name: 'AC Transit 65', ride: 30, headway: 45, fare: 2.50 }, // [input] ~45-min headway, ~30-min ride
                    lyft: { min: 13, cost: 21 } },
-      toMarina:  { walk: null, bike: [25, 50], ebike: [20, 28],
+      toMarina:  { walk: null, bike: [26, 51], ebike: [21, 28],
                    bus: { name: '65 + 51B', chain: [                          // the 65 to Downtown Berkeley BART, then the 51B
                      { name: 'AC Transit 65', ride: 30, headway: 45, fare: 2.50 },
                      { name: 'AC Transit 51B', ride: 15, headway: 15, fare: 0, walkAfter: 12 } ] }, // transfer free on Clipper; 51B ends at 3rd & University
@@ -210,7 +211,7 @@ window.PLAY = {
       label: 'Thousand Oaks', sub: 'Thousand Oaks & Colusa', ll: [37.89654, -122.28523],
       station: { ...ST.ecp, rescueLyft: { min: 16, cost: 20 } },
       toStation: { walk: 19, bike: [6, 9], ebike: [5, 5], bus: null, lyft: { min: 5, cost: 10 } },
-      toMarina:  { walk: null, bike: [23, 26], ebike: [16, 17], bus: null,
+      toMarina:  { walk: null, bike: [24, 27], ebike: [17, 18], bus: null,
                    lyft: { min: 14, cost: 17 }, drive: { min: 14, miles: 4.0 } },
       parkRide: { station: ST.ecp, drive: { min: 4, miles: 0.9 } },
       transbay: { line: 'FS', stop: 'Solano & Colusa', ll: [37.89135, -122.27986], walk: 2,   // [input] the FS's whole weekday schedule
@@ -221,7 +222,7 @@ window.PLAY = {
       label: 'North Berkeley flats', sub: 'Cedar & California', ll: [37.8775, -122.2795],
       station: { ...ST.nbk, rescueLyft: { min: 9, cost: 13 } },
       toStation: { walk: 10, bike: [4, 4], ebike: [3, 3], bus: null, lyft: { min: 5, cost: 10 } },
-      toMarina:  { walk: null, bike: [15, 17], ebike: [11, 12],
+      toMarina:  { walk: null, bike: [16, 18], ebike: [11, 12],
                    bus: { name: 'AC Transit 51B', ride: 20, headway: 15, fare: 2.50, walkAfter: 12 },
                    lyft: { min: 10, cost: 16 }, drive: { min: 11, miles: 3.0 } },
       parkRide: { station: ST.nbk, drive: { min: 3, miles: 0.5 } },
@@ -233,7 +234,7 @@ window.PLAY = {
       label: 'Central Berkeley', sub: 'Dwight & Bonar', ll: [37.86159, -122.28581],
       station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
       toStation: { walk: 31, bike: [9, 9], ebike: [7, 7], bus: null, lyft: { min: 7, cost: 12 } },
-      toMarina:  { walk: null, bike: [13, 14], ebike: [9, 10], bus: null,
+      toMarina:  { walk: 41, bike: [13, 14], ebike: [9, 10], bus: null,
                    lyft: { min: 10, cost: 13 }, drive: { min: 9, miles: 2.2 } },
       parkRide: { station: ST.ashby, drive: { min: 6, miles: 1.6 } },
       transbay: { stop: 'Shattuck & Dwight', ll: [37.86410, -122.26780], walk: 24, ...lineF(3, 36, 31) },
@@ -263,19 +264,21 @@ window.PLAY = {
   },
 
   // ---------------- The strategies ----------------
-  // access: drive | bike | ebike | transit (bus, or walk if close) | lyft
+  // access: drive | bike | ebike | walk | transit (the bus) | lyft
   // via:    ferry | bart | car
   strategies: [
     { id: 'ferry_drive',       via: 'ferry', access: 'drive', label: 'Drive → Ferry' },
     { id: 'ferry_drive_early', via: 'ferry', access: 'drive', early: 1, label: 'Drive → Ferry, one boat early' },
     { id: 'ferry_ebike',       via: 'ferry', access: 'ebike', label: 'E-bike → Ferry' },
     { id: 'ferry_bike',        via: 'ferry', access: 'bike',  label: 'Bike → Ferry' },
+    { id: 'ferry_walk',        via: 'ferry', access: 'walk',  label: 'Walk → Ferry' },
     { id: 'ferry_transit',     via: 'ferry', access: 'transit', label: 'Bus → Ferry' },
     { id: 'ferry_lyft',        via: 'ferry', access: 'lyft',  label: 'Lyft → Ferry' },
     { id: 'bart_drive',        via: 'bart',  access: 'drive', label: 'Drive → BART' },
     { id: 'bart_drive_early',  via: 'bart',  access: 'drive', beatLot: 1, label: 'Drive → BART before the lot fills' },
     { id: 'bart_ebike',        via: 'bart',  access: 'ebike', label: 'E-bike → BART' },
     { id: 'bart_bike',         via: 'bart',  access: 'bike',  label: 'Bike → BART' },
+    { id: 'bart_walk',         via: 'bart',  access: 'walk',  label: 'Walk → BART' },
     { id: 'bart_transit',      via: 'bart',  access: 'transit', label: 'Bus → BART' },
     { id: 'bart_lyft',         via: 'bart',  access: 'lyft',  label: 'Lyft → BART' },
     { id: 'transbay',          via: 'tbus',  access: 'walk',  label: 'Transbay bus' },

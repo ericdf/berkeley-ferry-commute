@@ -82,8 +82,11 @@
     return t - P().bus.walkToStopMin;
   };
 
-  function transitChoice(legs) {
+  // mode 'walk': on foot only (if it's not too far); 'bus': the bus only; otherwise whichever a person would pick
+  function transitChoice(legs, mode) {
     if (!legs) return null;
+    if (mode === 'walk') return legs.walk != null && legs.walk <= P().maxWalkMin ? { type: 'walk', min: legs.walk } : null;
+    if (mode === 'bus') return legs.bus ? { type: 'bus', bus: legs.bus } : null;
     if (legs.walk != null && legs.walk <= 15) return { type: 'walk', min: legs.walk };
     if (legs.bus) return { type: 'bus', bus: legs.bus };
     if (legs.walk != null) return { type: 'walk', min: legs.walk };
@@ -109,17 +112,15 @@
     if (s.access === 'drive') return !!has.car && (s.via !== 'ferry' || !!home.toMarina.drive);
     if (s.access === 'bike') return !!has.bike && !!legs.bike;
     if (s.access === 'ebike') return !!has.ebike && !!legs.ebike;
-    if (s.access === 'transit') return !!transitChoice(legs);
+    if (s.access === 'transit') return !!transitChoice(legs, 'bus');
+    if (s.access === 'walk') return !!transitChoice(legs, 'walk');
     if (s.access === 'lyft') return !!legs.lyft;
     return true;
   }
 
   function labelFor(s, profile) {
     if (s.via === 'tbus') return `Transbay bus (${P().homes[profile.home].transbay.line})`;
-    if (s.access !== 'transit') return s.label;
-    const home = P().homes[profile.home];
-    const tc = transitChoice(s.via === 'ferry' ? home.toMarina : home.toStation);
-    return s.label.replace('Bus', tc && tc.type === 'walk' ? 'Walk' : 'Bus');
+    return s.label;
   }
 
   // ---------- one day ----------
@@ -167,7 +168,7 @@
         return clock + legs[kind][dir] + (place === 'station' && !profile.bikeAlong ? C.bart.bikeParkMin : 0);  // lock or unlock at the station
       }
       if (kind === 'lyft') return lyft(legs.lyft, clock, half, '', from, to);
-      const tc = transitChoice(legs);
+      const tc = kind === 'walk' ? transitChoice(legs, 'walk') || transitChoice(legs) : transitChoice(legs, 'bus') || transitChoice(legs);
       if (tc.type === 'walk') { leg(from, to, 'walk', half); return clock + W(tc.min); }
       // one bus, or a chain with a transfer (the 65 to Downtown Berkeley, then the 51B)
       const chain = tc.bus.chain ? (dir ? tc.bus.chain.slice().reverse() : tc.bus.chain) : [tc.bus];
@@ -236,7 +237,7 @@
       else if (s.access === 'bike' || s.access === 'ebike') plannedLeave = atPier - F.bikeToPierMin - legsM[s.access][0];
       else if (s.access === 'lyft') plannedLeave = atPier - F.pierWalkMin - legsM.lyft.min - C.lyft.waitMin;
       else {
-        const tc = transitChoice(legsM);
+        const tc = transitChoice(legsM, s.access === 'walk' ? 'walk' : 'bus') || transitChoice(legsM);
         if (tc.type === 'walk') plannedLeave = atPier - F.pierWalkMin - tc.min;
         else plannedLeave = planBus(atPier - F.pierWalkMin, tc.bus);
       }
@@ -250,7 +251,7 @@
       else if (s.access === 'bike' || s.access === 'ebike') plannedLeave = atStation - legsS[s.access][0] - (profile.bikeAlong ? 0 : C.bart.bikeParkMin);
       else if (s.access === 'lyft') plannedLeave = atStation - legsS.lyft.min - C.lyft.waitMin;
       else {
-        const tc = transitChoice(legsS);
+        const tc = transitChoice(legsS, s.access === 'walk' ? 'walk' : 'bus') || transitChoice(legsS);
         if (tc.type === 'walk') plannedLeave = atStation - tc.min;
         else plannedLeave = planBus(atStation, tc.bus);
       }
@@ -366,7 +367,7 @@
       if (s.via === 'bart') return access(s.access, legsS, clock, 1, 'station');
       if (s.access === 'drive') return null;
       // ferry riders who fell back to BART: bike comes with you; bus/lyft riders use the station legs
-      const kind = (s.access === 'bike' || s.access === 'ebike') ? s.access : (s.access === 'lyft' ? 'lyft' : 'transit');
+      const kind = (s.access === 'bike' || s.access === 'ebike' || s.access === 'lyft') ? s.access : s.access === 'walk' && transitChoice(legsS, 'walk') ? 'walk' : 'transit';
       const legs = (kind === 'transit' && !transitChoice(legsS)) ? { ...legsS, walk: null, bus: null } : legsS;
       return access(kind === 'transit' && !transitChoice(legs) ? 'lyft' : kind, legs, clock, 1, 'station');
     };
