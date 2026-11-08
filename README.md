@@ -4,6 +4,10 @@ A three-minute browser cartoon of one commute using the proposed Berkeley Marina
 
 **Watch it:** https://ericdf.github.io/berkeley-ferry-commute/
 
+## Play a Month
+
+`play.html` is an interactive companion. You set where you live, your hours and what you own, then live 21 workdays and compare every way to get to SF against the same month of luck. See `PLAY.md`.
+
 ## Run it
 
 It's a static site with no build step:
