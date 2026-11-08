@@ -25,6 +25,18 @@ const ST = {
 // so a lot with fewer stalls fills proportionally sooner (computed at the bottom of this file).
 const BART_FIRST_CAR = '5:30';            // [scenario] when commuters start filling BART lots
 
+// AC Transit Transbay F: about every 30 min all day [input]; from Salesforce Transit Center at :15/:45,
+// 27 min to Ashby BART, 34 to Shattuck & Allston [input]. Toward SF, times at Shattuck & Allston are
+// [estimate] :20/:50. lead = minutes after Shattuck & Allston; ride/back = minutes to/from SF from that stop.
+const hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+const tm = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+const every = (a, b, step) => { const out = []; for (let t = tm(a); t <= tm(b); t += step) out.push(t); return out; };
+const lineF = (lead, ride, back) => ({
+  line: 'F',
+  am: every('5:20', '10:20', 30).map((t) => [hm(t + lead), hm(t + lead + ride)]),
+  pm: every('15:15', '20:45', 30).map((t) => [hm(t), hm(t + back)]),
+});
+
 window.PLAY = {
   days: 21,                                  // [scenario] workdays in a month
 
@@ -74,6 +86,13 @@ window.PLAY = {
     },
   },
 
+  // ---------------- AC Transit Transbay buses ----------------
+  transbay: {
+    fare: 6.50,                              // [input] AC Transit Transbay adult fare, July 2026
+    maxWaitMin: 45,                          // [scenario] a longer wait than this and you take BART instead
+    stc: [37.7896, -122.3965],               // Salesforce Transit Center
+  },
+
   // ---------------- BART ----------------
   bart: {
     stationMin: 3,                           // [scenario] street to platform, each end
@@ -89,6 +108,7 @@ window.PLAY = {
     civic: {
       label: 'Civic Center', fareKey: 'civic', bartRideAdj: 0, bartWalkMin: 4,
       bikeFromFerry: 12, bikeFromBart: 2,    // [map] up Market St, 1.9 mi
+      fromSTC: { min: 20, walk: 6, fare: 2.85, mode: 'muni' },   // Muni Metro from Montgomery
       ferryEgressMin: 27, ferryEgressWalkMin: 10, ferryEgressFare: 2.55, // [scenario] FB→Embarcadero→BART→Civic Center (cartoon legs); [input] 2026 fare
       garage: 30,                            // [estimate] all-day garage near Civic Center
       driveAdjMin: 0,
@@ -96,6 +116,7 @@ window.PLAY = {
     fidi: {
       label: 'Financial District', fareKey: 'fidi', bartRideAdj: -6, bartWalkMin: 6,
       bikeFromFerry: 4, bikeFromBart: 2,
+      fromSTC: { min: 6, walk: 6, fare: 0 },
       ferryEgressMin: 8, ferryEgressFare: 0,
       garage: 38,                            // [estimate]
       driveAdjMin: -3,
@@ -103,6 +124,7 @@ window.PLAY = {
     soma: {                                  // 2nd & Folsom: the Google, Salesforce and startup blocks
       label: 'SoMA', fareKey: 'fidi', bartRideAdj: -7, bartWalkMin: 11,   // Embarcadero station, then walk
       bikeFromFerry: 6, bikeFromBart: 4,
+      fromSTC: { min: 6, walk: 6, fare: 0 },
       ferryEgressMin: 16, ferryEgressFare: 0, // [map] Ferry Bldg down the Embarcadero and Folsom, ~0.8 mi
       garage: 32,                            // [estimate]
       driveAdjMin: -5,                       // first exits off the bridge
@@ -111,6 +133,7 @@ window.PLAY = {
     mbay: {                                  // 3rd St at Chase Center: Uber, UCSF, the biotech blocks
       label: 'Mission Bay', fareKey: 'civic', bartRideAdj: -2,             // Powell St station...
       bikeFromFerry: 12, bikeFromBart: 11,   // [map] Embarcadero to Chase Center 2.1 mi; Powell down 4th St
+      fromSTC: { min: 24, walk: 9, fare: 2.85, mode: 'muni' },  // walk to Yerba Buena/Moscone, the T
       bartWalkMin: 24, bartFootMin: 9, bartEgressFare: 2.85, // ...then the Central Subway T to UCSF/Chase Center. [input] Muni $2.85
       ferryEgressMin: 30, ferryEgressWalkMin: 10, ferryEgressFare: 2.85, ferryEgressMode: 'muni',  // Muni from Embarcadero down King St
       garage: 28,                            // [estimate]
@@ -169,7 +192,9 @@ window.PLAY = {
                    bus: { name: 'AC Transit 65', ride: 30, headway: 45, fare: 2.50 }, // [input] ~45-min headway, ~30-min ride
                    lyft: { min: 13, cost: 21 } },
       toMarina:  { walk: null, bike: [25, 50], ebike: [20, 28],
-                   bus: { name: '65 + 51B', ride: 50, headway: 45, fare: 2.50 },
+                   bus: { name: '65 + 51B', chain: [                          // the 65 to Downtown Berkeley BART, then the 51B
+                     { name: 'AC Transit 65', ride: 30, headway: 45, fare: 2.50 },
+                     { name: 'AC Transit 51B', ride: 15, headway: 15, fare: 0, walkAfter: 12 } ] }, // transfer free on Clipper; 51B ends at 3rd & University
                    lyft: { min: 18, cost: 26 }, drive: { min: 20, miles: 4.9 } },        // [map] 4.9 mi, cartoon route
       parkRide: { station: ST.nbk, drive: { min: 12, miles: 2.8 } },   // [map] 2.8 mi
       driveSF: { min: 45, miles: 15 },
@@ -181,6 +206,8 @@ window.PLAY = {
       toMarina:  { walk: null, bike: [23, 26], ebike: [16, 17], bus: null,
                    lyft: { min: 14, cost: 17 }, drive: { min: 14, miles: 4.0 } },
       parkRide: { station: ST.ecp, drive: { min: 4, miles: 0.9 } },
+      transbay: { line: 'FS', stop: 'Solano & Colusa', ll: [37.89135, -122.27986], walk: 2,   // [input] the FS's whole weekday schedule
+                  am: [['6:10', '6:50'], ['7:52', '8:30']], pm: [['16:30', '17:35'], ['18:30', '19:24']] },
       driveSF: { min: 35, miles: 14 },
     },
     nberk: {
@@ -188,9 +215,11 @@ window.PLAY = {
       station: { ...ST.nbk, rescueLyft: { min: 9, cost: 13 } },
       toStation: { walk: 10, bike: [4, 4], ebike: [3, 3], bus: null, lyft: { min: 5, cost: 10 } },
       toMarina:  { walk: null, bike: [15, 17], ebike: [11, 12],
-                   bus: { name: 'AC Transit 51B', ride: 20, headway: 25, fare: 2.50 },
+                   bus: { name: 'AC Transit 51B', ride: 20, headway: 15, fare: 2.50, walkAfter: 12 },
                    lyft: { min: 10, cost: 16 }, drive: { min: 11, miles: 3.0 } },
       parkRide: { station: ST.nbk, drive: { min: 3, miles: 0.5 } },
+      transbay: { line: 'FS', stop: 'Shattuck & Cedar', ll: [37.87975, -122.26905], walk: 12,  // FS times + minutes to this stop
+                  am: [['6:16', '6:50'], ['7:58', '8:30']], pm: [['16:30', '17:28'], ['18:30', '19:18']] },
       driveSF: { min: 35, miles: 13 },
     },
     central: {
@@ -200,6 +229,7 @@ window.PLAY = {
       toMarina:  { walk: null, bike: [13, 14], ebike: [9, 10], bus: null,
                    lyft: { min: 10, cost: 13 }, drive: { min: 9, miles: 2.2 } },
       parkRide: { station: ST.ashby, drive: { min: 6, miles: 1.6 } },
+      transbay: { stop: 'Shattuck & Dwight', ll: [37.86410, -122.26780], walk: 24, ...lineF(3, 36, 31) },
       driveSF: { min: 30, miles: 12 },
     },
     elmwood: {
@@ -207,9 +237,10 @@ window.PLAY = {
       station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
       toStation: { walk: 21, bike: [7, 7], ebike: [5, 5], bus: null, lyft: { min: 6, cost: 11 } },
       toMarina:  { walk: null, bike: [26, 27], ebike: [18, 19],
-                   bus: { name: 'AC Transit 51B', ride: 40, headway: 15, fare: 2.50 },
+                   bus: { name: 'AC Transit 51B', ride: 35, headway: 15, fare: 2.50, walkAfter: 12 },
                    lyft: { min: 17, cost: 19 }, drive: { min: 16, miles: 4.5 } },
       parkRide: { station: ST.ashby, drive: { min: 5, miles: 1.1 } },
+      transbay: { stop: 'Adeline & Russell', ll: [37.85660, -122.26850], walk: 18, ...lineF(10, 28, 25) },
       driveSF: { min: 33, miles: 12 },
     },
     south: {
@@ -219,6 +250,7 @@ window.PLAY = {
       toMarina:  { walk: null, bike: [20, 21], ebike: [14, 15], bus: null,
                    lyft: { min: 13, cost: 16 }, drive: { min: 12, miles: 3.3 } },
       parkRide: { station: ST.ashby, drive: { min: 2, miles: 0.4 } },
+      transbay: { stop: 'Ashby BART', ll: [37.85300, -122.26990], walk: 6, ...lineF(8, 30, 27) },
       driveSF: { min: 30, miles: 11 },
     },
   },
@@ -239,6 +271,7 @@ window.PLAY = {
     { id: 'bart_bike',         via: 'bart',  access: 'bike',  label: 'Bike → BART' },
     { id: 'bart_transit',      via: 'bart',  access: 'transit', label: 'Bus → BART' },
     { id: 'bart_lyft',         via: 'bart',  access: 'lyft',  label: 'Lyft → BART' },
+    { id: 'transbay',          via: 'tbus',  access: 'walk',  label: 'Transbay bus' },
     { id: 'drive_sf',          via: 'car',   access: 'drive', label: 'Drive into SF' },
   ],
 };

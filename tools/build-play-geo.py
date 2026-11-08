@@ -144,6 +144,7 @@ MARINA_XY = nodes[nearest(tuple(G['places']['terminalNode']), 'car')]   # the ca
 
 # El Cerrito Plaza is past the Berkeley data: Thousand Oaks Blvd to the city line, then up beside BART.
 ECP = LL(37.90300, -122.29900)
+STC = LL(37.78960, -122.39650)                        # Salesforce Transit Center
 ECP_APPROACH = [ECP, LL(37.89900, -122.29550)]
 ECP_NODE_XY = LL(37.89658, -122.28679)              # Thousand Oaks Blvd at the Berkeley line
 
@@ -263,6 +264,10 @@ for hid, h in HOMES.items():
     r['car']['bridge'] = to_bridge(home)
     if h.get('parkRide'):
         r['car']['parkRide'] = street(home, LL(*h['parkRide']['station']['ll']), 'car')
+    if h.get('transbay'):   # walk to the Transbay stop; the bus to the bridge and Salesforce Transit Center
+        stop = LL(*h['transbay']['ll'])
+        r['bike']['tstop'] = street(home, stop, 'bike')
+        r['car']['tbus'] = to_bridge(stop) + [[r1(v) for v in STC]]
     out['homes'][hid] = r
     ln = {f'{m}.{k}': round(length(v) / MI, 2) for m in r for k, v in r[m].items()}
     print(hid, ln)

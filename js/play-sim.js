@@ -68,6 +68,14 @@
   const nextBus = (t, bus) => { const k = Math.ceil((t - BUS_OFFSET) / bus.headway); return BUS_OFFSET + k * bus.headway; };
   const lastBusBy = (t, bus) => { const k = Math.floor((t - BUS_OFFSET) / bus.headway); return BUS_OFFSET + k * bus.headway; };
 
+  // Leave-home time to be somewhere by arriveBy on a bus (or a chain of buses with transfers)
+  const planBus = (arriveBy, b) => {
+    const chain = b.chain || [b];
+    let t = arriveBy - (chain[chain.length - 1].walkAfter || 0);
+    for (let i = chain.length - 1; i >= 0; i--) t = lastBusBy(t - chain[i].ride, chain[i]);
+    return t - P().bus.walkToStopMin;
+  };
+
   function transitChoice(legs) {
     if (!legs) return null;
     if (legs.walk != null && legs.walk <= 15) return { type: 'walk', min: legs.walk };
@@ -90,6 +98,7 @@
   function eligible(s, profile) {
     const C = P(), home = C.homes[profile.home], has = profile.has || {};
     const legs = s.via === 'ferry' ? home.toMarina : home.toStation;
+    if (s.via === 'tbus') return !!home.transbay;
     if (s.access === 'drive' && s.via === 'bart') return !!has.car && !!(home.parkRide && home.parkRide.station.lot);
     if (s.access === 'drive') return !!has.car && (s.via !== 'ferry' || !!home.toMarina.drive);
     if (s.access === 'bike') return !!has.bike && !!legs.bike;
@@ -100,6 +109,7 @@
   }
 
   function labelFor(s, profile) {
+    if (s.via === 'tbus') return `Transbay bus (${P().homes[profile.home].transbay.line})`;
     if (s.access !== 'transit') return s.label;
     const home = P().homes[profile.home];
     const tc = transitChoice(s.via === 'ferry' ? home.toMarina : home.toStation);
@@ -153,18 +163,26 @@
       if (kind === 'lyft') return lyft(legs.lyft, clock, half, '', from, to);
       const tc = transitChoice(legs);
       if (tc.type === 'walk') { leg(from, to, 'walk', half); return clock + W(tc.min); }
-      const bus = tc.bus;
-      clock += W(C.bus.walkToStopMin);
-      const dep = nextBus(clock, bus);
-      if (dir && dep > T(C.bus.serviceEnds)) return lyft(legs.lyft, clock, half, `No ${bus.name} this late. `, from, to);
-      if (dep - clock > (dir ? C.bus.pmMaxWaitMin : C.bus.maxWaitMin)) {
-        return lyft(legs.lyft, clock, half, `Next ${bus.name} isn't until ${fmt(dep)}. `, from, to);
+      // one bus, or a chain with a transfer (the 65 to Downtown Berkeley, then the 51B)
+      const chain = tc.bus.chain ? (dir ? tc.bus.chain.slice().reverse() : tc.bus.chain) : [tc.bus];
+      const last = tc.bus.chain ? tc.bus.chain[tc.bus.chain.length - 1] : tc.bus;
+      clock += W(C.bus.walkToStopMin) + (dir ? W(last.walkAfter || 0) : 0);
+      for (let i = 0; i < chain.length; i++) {
+        const bus = chain[i], dep = nextBus(clock, bus), wait = dep - clock;
+        if (dir && dep > T(C.bus.serviceEnds)) return lyft(legs.lyft, clock, half, `No ${bus.name} this late. `, from, to);
+        // A Lyft instead of a long wait, only if the time saved is worth its price to you (or you can't be late)
+        const worthIt = (!dir && profile.strict) || (wait / 60) * (profile.vot || 0) > legs.lyft.cost - bus.fare;
+        if (wait > (dir ? C.bus.pmMaxWaitMin : C.bus.maxWaitMin) && worthIt) {
+          return lyft(legs.lyft, clock, half, `Next ${bus.name} isn't until ${fmt(dep)}. `, from, to);
+        }
+        const lateBy = i === 0 ? Math.round(luck.busLate[dir]) : 0;
+        if (lateBy) say(dep, `The ${bus.name} is ${lateBy} min late.`, 'bad');
+        else if (wait > 20) say(clock, `Wait ${Math.round(wait)} min for the ${bus.name}.`);
+        pay(bus.fare); Wt(wait + lateBy);
+        clock = dep + bus.ride + lateBy;
       }
-      const lateBy = Math.round(luck.busLate[dir]);
-      if (lateBy) say(dep, `The ${bus.name} is ${lateBy} min late.`, 'bad');
-      pay(bus.fare); leg(from, to, 'bus', half);
-      Wt(dep - clock + lateBy);
-      return dep + bus.ride + lateBy + (dir ? W(C.bus.walkToStopMin) : 0);  // evening: stop to front door
+      leg(from, to, 'bus', half);
+      return clock + (dir ? W(C.bus.walkToStopMin) : W(last.walkAfter || 0));  // stop to front door / last stop to the pier
     };
 
     const bart = (clock, dir) => {
@@ -214,7 +232,7 @@
       else {
         const tc = transitChoice(legsM);
         if (tc.type === 'walk') plannedLeave = atPier - F.pierWalkMin - tc.min;
-        else plannedLeave = lastBusBy(atPier - F.pierWalkMin - tc.bus.ride, tc.bus) - C.bus.walkToStopMin;
+        else plannedLeave = planBus(atPier - F.pierWalkMin, tc.bus);
       }
     } else if (s.via === 'bart') {
       const atStation = x.plan - ((bikePlan ? dest.bikeFromBart : dest.bartWalkMin) + 2 * C.bart.stationMin + bRide + 5) - 5;
@@ -228,8 +246,13 @@
       else {
         const tc = transitChoice(legsS);
         if (tc.type === 'walk') plannedLeave = atStation - tc.min;
-        else plannedLeave = lastBusBy(atStation - tc.bus.ride, tc.bus) - C.bus.walkToStopMin;
+        else plannedLeave = planBus(atStation, tc.bus);
       }
+    } else if (s.via === 'tbus') {
+      const tb = home.transbay, trips = tb.am.map(([a, b]) => [T(a), T(b)]);
+      let k = trips.length - 1;
+      while (k > 0 && trips[k][1] + dest.fromSTC.min > x.plan) k--;
+      plannedLeave = trips[k][0] - tb.walk - 3;
     } else {
       plannedLeave = x.plan - (home.driveSF.min + dest.driveAdjMin + 7 + C.drive.garageWalkMin) - 5;
     }
@@ -244,6 +267,23 @@
 
     if (s.via === 'car') {
       clock = driveToSF(clock, 'home'); carAt = 'sf';
+    } else if (s.via === 'tbus') {
+      const tb = home.transbay, trips = tb.am.map(([a, b]) => [T(a), T(b)]);
+      clock += W(tb.walk);
+      const trip = trips.find((t) => t[0] >= clock);
+      if (!trip || trip[0] - clock > C.transbay.maxWaitMin) {
+        say(clock, trip ? `Next ${tb.line} isn't until ${fmt(trip[0])}. Over to BART.` : `No more ${tb.line} buses this morning. Over to BART.`, 'bad');
+        clock = lyft(legsS.lyft, clock, 'am', 'To BART: ', 'home', 'station');
+        clock = bart(clock, 0) + bartEgress();
+      } else {
+        const lateBy = Math.round(luck.busLate[0]);
+        if (lateBy) say(trip[0], `The ${tb.line} is ${lateBy} min late.`, 'bad');
+        else if (trip[0] - clock > 15) say(clock, `Wait ${Math.round(trip[0] - clock)} min for the ${fmt(trip[0])} ${tb.line}.`);
+        Wt(trip[0] - clock + lateBy);
+        pay(C.transbay.fare + dest.fromSTC.fare);
+        leg('home', 'tstop', 'walk', 'am'); leg('tstop', 'stc', 'bus', 'am'); leg('stc', 'dest', dest.fromSTC.mode || 'walk', 'am');
+        clock = trip[1] + lateBy + part(dest.fromSTC.min, dest.fromSTC.walk);
+      }
     } else if (parkRide) {
       const lot = stn.lot, fill = T(lot.fillMean) + luck.bartLotZ * lot.fillSdMin;
       clock += parkRide.drive.min + luck.traffic[0] * 0.3;
@@ -329,6 +369,23 @@
     } else if (s.via === 'bart') {
       clock = bart(clock + bartEgress(), 1);
       clock = homeFromStation();
+    } else if (s.via === 'tbus') {
+      const tb = home.transbay, trips = tb.pm.map(([a, b]) => [T(a), T(b)]);
+      const atSTC = clock + part(dest.fromSTC.min, dest.fromSTC.walk);
+      const trip = trips.find((t) => t[0] >= atSTC);
+      if (!trip || trip[0] - atSTC > C.transbay.maxWaitMin) {
+        say(atSTC, trip ? `Next ${tb.line} isn't until ${fmt(trip[0])}. BART home instead.` : `No more ${tb.line} buses tonight. BART home instead.`, 'bad');
+        clock = bart(clock + bartEgress(), 1);
+        clock = homeFromStation();
+      } else {
+        const lateBy = Math.round(luck.busLate[1]);
+        if (lateBy) say(trip[0], `The ${tb.line} is ${lateBy} min late.`, 'bad');
+        else if (trip[0] - atSTC > 15) say(atSTC, `Wait ${Math.round(trip[0] - atSTC)} min for the ${fmt(trip[0])} ${tb.line}.`);
+        Wt(trip[0] - atSTC + lateBy);
+        pay(C.transbay.fare + dest.fromSTC.fare);
+        leg('dest', 'stc', dest.fromSTC.mode || 'walk', 'pm'); leg('stc', 'tstop', 'bus', 'pm'); leg('tstop', 'home', 'walk', 'pm');
+        clock = trip[1] + lateBy + W(tb.walk);
+      }
     } else {
       const atFB = clock + ferryEgress();
       const boat = F.pmFromSF.map(T).find((b) => b >= atFB);

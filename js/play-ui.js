@@ -24,7 +24,7 @@
   const PG = window.PLAYGEO; // street routes and traced lines, from tools/build-play-geo.py
   const pt = {
     marina: PL.pierEnd, fb: PL.ferryBuilding, emb: PL.embarcaderoBart,
-    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll), mbay: ll(C.dests.mbay.ll),
+    civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll), mbay: ll(C.dests.mbay.ll), stc: ll(C.transbay.stc),
   };
   const homePt = (id) => ll(C.homes[id].ll);
   // Drive → BART parks at the home's park-and-ride station; everything else uses the home station
@@ -47,6 +47,7 @@
     if (k === 'home') return homePt(st.profile.home);
     if (k === 'station') return stationPt(st.profile.home);
     if (k === 'dest') return destPt();
+    if (k === 'tstop') return ll(C.homes[st.profile.home].transbay.ll);
     return pt[k];
   }
   // Every leg follows a real line: streets, tracks, the freeway and bridge, or the ferry lane.
@@ -57,6 +58,10 @@
     const net = H[L.mode === 'car' || L.mode === 'bus' ? 'car' : 'bike'];
     if (L.mode === 'ferry') return from('marina', G.ferry.slice());
     if (has('fb') && L.mode !== 'ferry') return from('fb', ferryEgress());
+    if (has('tstop') && has('home')) return from('home', H.bike.tstop);
+    if (has('tstop') && has('stc')) return from('tstop', H.car.tbus);
+    if (has('stc') && has('dest')) return from('stc', ({ civic: [pt.stc, PL.montgomeryBart, PL.powellBart, pt.civic],
+      mbay: [pt.stc, ...[[37.7843, -122.4020], [37.7775, -122.3965], [37.7762, -122.3945], [37.7705, -122.3905]].map(ll), pt.mbay] })[st.profile.dest] || [pt.stc, destPt()]);
     if (L.mode === 'bart') return from('station', [...stn.bart, ...tube().slice(1)]);
     if (has('home') && has('dest')) return from('home', toSF(H.car.bridge));
     if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...toSF(PG.marinaBridge)]);
@@ -400,6 +405,7 @@
       ['Ferry trip', `${C.ferry.boardMin + C.ferry.sailMin + C.ferry.dockMin} min boarding to stepping off; fare $${C.ferry.fare}`, 'WETA projected 2035 fare'],
       ['Ferry parking', `${C.ferry.lot.stalls} paid stalls + ~${C.ferry.lot.curb} on Marina Blvd; none on University west of I-80. $${C.ferry.lot.fee}/day. Usually full by ${fmt(T(C.ferry.lot.fillMean))} (±${C.ferry.lot.fillSdMin} min): cars per minute from Berkeley ${C.ferry.lot.arrivals.berkeley}, from El Cerrito, Richmond, Albany, Kensington and Emeryville ${C.ferry.lot.arrivals.region}, and ${C.ferry.lot.arrivals.bartSpill.toFixed(1)} BART parkers who lost their space (${Math.round(C.ferry.lot.bartSpillShare * 100)}% of the ${C.ferry.lot.displaced} spaces going away at North Berkeley and Ashby).`, 'stalls: draft Parking Mgmt Plan (May 2026); arrivals: estimates'],
       ['BART parking', [...new Map(Object.values(C.homes).flatMap((h) => [h.station, h.parkRide && h.parkRide.station]).filter((x) => x && x.lot).map((x) => [x.name, x])).values()].map((x) => `${x.name}: ${x.lot.stalls ? `${x.lot.stalls} spaces (${x.lot.stallsToday} today), ` : ''}full by about ${fmt(T(x.lot.fillMean))}, $${x.lot.fee.toFixed(2)}/day`).join('; ') + '. Downtown Berkeley has no BART lot.', 'spaces: BART Board caps for the North Berkeley and Ashby housing; fill times: today\'s, scaled to the spaces left'],
+      ['Transbay buses', `AC Transit $${C.transbay.fare.toFixed(2)} to Salesforce Transit Center. F (Shattuck, Adeline, Ashby BART) about every 30 min; FS (Solano, Shattuck, University) two trips each way. A wait over ${C.transbay.maxWaitMin} min and you take BART.`, 'AC Transit schedules; F times toward SF estimated'],
       ['If the next boat is more than', `${C.ferry.maxWaitBeforeBart} min away, you take BART instead. If your car is at the Marina, you go back for it.`, 'game rule'],
       ['BART', `Fares (2026): ${Object.values(C.homes).map((h) => `${h.station.name} $${h.station.fare.civic.toFixed(2)}`).filter((v, i, a) => a.indexOf(v) === i).join(', ')} to Civic Center. Wait 0–${C.bart.waitMaxMin} min; ${Math.round(C.bart.delayP * 100)}% chance of a delay.`, '2026 fare table; some fares estimated'],
       ['Driving into SF', `Bay Bridge toll $${C.drive.toll} (westbound), garage $${C.dests.civic.garage}/day near Civic Center, $${C.drive.perMile}/mile. ${Math.round(C.drive.bridgeMessP * 100)}% chance of a bad bridge day.`, 'toll: 2026; garage and per-mile: estimates'],
