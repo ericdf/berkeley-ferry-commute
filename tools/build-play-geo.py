@@ -138,37 +138,32 @@ def pl(pts):
 
 
 # ---------------------------------------------------------------- places
-MARINA = junction('UNIVERSITY AV', 'MARINA BL')    # placeholder, replaced below if the cartoon's node is close
-geo_src = open(sys.argv[3]).read() if len(sys.argv) > 3 else None
-TERMINAL = None
-if geo_src:
-    G = json.loads(geo_src[geo_src.index('{'):geo_src.rindex('}') + 1])
-    TERMINAL = tuple(G['places']['terminalNode'])
-I80_ENTRY = junction('UNIVERSITY AV', '6TH ST')
+geo_src = open(sys.argv[3]).read()
+G = json.loads(geo_src[geo_src.index('{'):geo_src.rindex('}') + 1])
+MARINA_XY = nodes[nearest(tuple(G['places']['terminalNode']), 'car')]   # the cartoon's terminal lot
 
-# Albany: off the Berkeley data. Solano Ave west to Masonic, then Masonic (beside BART) to the city line.
-ALBANY_LINE = LL(37.88305, -122.29120)             # Masonic Ave at the Berkeley line
-SOLANO_MASONIC = LL(37.89070, -122.29420)
+# El Cerrito Plaza is past the Berkeley data: Thousand Oaks Blvd to the city line, then up beside BART.
 ECP = LL(37.90300, -122.29900)
+ECP_APPROACH = [ECP, LL(37.89900, -122.29550)]
+ECP_NODE_XY = LL(37.89658, -122.28679)              # Thousand Oaks Blvd at the Berkeley line
 
 
-def endpoint(xy, mode, home_id=None):
+def endpoint(xy, mode):
     """(street node, hand-traced approach from the real point to that node)."""
-    if home_id == 'albany':
-        return nearest(ALBANY_LINE, mode), [xy, SOLANO_MASONIC, ALBANY_LINE]
-    if math.dist(xy, ECP) < 50:                     # El Cerrito Plaza: down Masonic to the line
-        return nearest(ALBANY_LINE, mode), [xy, ALBANY_LINE]
-    k = nearest(xy, mode)
-    return k, [xy]
+    if math.dist(xy, ECP) < 50:
+        k = nearest(ECP_NODE_XY, mode)
+        return k, ECP_APPROACH + [nodes[k]]
+    return nearest(xy, mode), [xy]
 
 
-def street(a_xy, b_xy, mode, a_home=None, b_home=None):
-    if a_home == 'albany' and math.dist(b_xy, ECP) < 50:   # Solano to Masonic, up Masonic to the station
-        return pl([a_xy, SOLANO_MASONIC, b_xy])
-    ka, appr_a = endpoint(a_xy, mode, a_home)
-    kb, appr_b = endpoint(b_xy, mode, b_home)
-    mid = dijkstra(ka, kb, mode)
-    return pl(appr_a + mid + appr_b[::-1])
+def street(a_xy, b_xy, mode):
+    ka, appr_a = endpoint(a_xy, mode)
+    kb, appr_b = endpoint(b_xy, mode)
+    return pl(appr_a + dijkstra(ka, kb, mode) + appr_b[::-1])
+
+
+def length(p):
+    return sum(math.dist(p[i], p[i + 1]) for i in range(len(p) - 1))
 
 
 # ---------------------------------------------------------------- hand-traced lines (lat, lon)
@@ -187,8 +182,6 @@ BART_SOUTH = trace(  # Downtown Berkeley -> Ashby -> MacArthur -> 19th St -> 12t
 TRANSBAY = trace(  # West Oakland -> tube -> Embarcadero
     (37.80480, -122.29510), (37.80340, -122.30400), (37.80060, -122.31800), (37.79640, -122.36000),
     (37.79400, -122.38900))
-STATION_LL = {'El Cerrito Plaza': (37.90300, -122.29900), 'North Berkeley': (37.87400, -122.28340),
-              'Downtown Berkeley': (37.87010, -122.26810)}
 
 FREEWAY_SOUTH = trace(  # I-80 from Ashby south past Emeryville to the Maze and the toll plaza
     (37.85344, -122.30007), (37.84394, -122.29763), (37.83500, -122.29560), (37.82900, -122.29400),
@@ -206,8 +199,8 @@ SF_OFF = {
 }
 
 
-def i80_wb_south_of(lat):
-    """Berkeley's own I-80 westbound centerline from University Ave to Ashby."""
+def i80_wb():
+    """Berkeley's own I-80 westbound centerline, Albany line to Ashby."""
     wb = [s for s in segs if s['raw'] == 'I80 WB']
     ends = {s['b'] for s in wb}
     cur = next(s for s in wb if s['a'] not in ends)
@@ -218,37 +211,69 @@ def i80_wb_south_of(lat):
             break
         cur = max(nxt, key=lambda s: len(s['pts']))   # the through lanes, not the short ramp merge
         out += cur['pts'][1:]
+    return out
+
+
+FREEWAY = i80_wb() + FREEWAY_SOUTH[1:] + BAY_BRIDGE[1:]   # Albany line -> Rincon Hill
+
+
+def fwy_from(lat):
     y0 = P(0, lat)[1]
-    return [q for q in out if q[1] <= y0]
+    return [q for q in FREEWAY if q[1] <= y0]
 
 
-FREEWAY = [nodes[I80_ENTRY]] + i80_wb_south_of(37.8695) + FREEWAY_SOUTH[1:] + BAY_BRIDGE[1:]
+# Freeway entries: University Ave (north and central Berkeley), Ashby Ave (south), Buchanan St (El Cerrito Plaza)
+ENTRIES = {
+    'university': (nodes[junction('UNIVERSITY AV', '6TH ST')], fwy_from(37.8695)),
+    'ashby': (nodes[junction('ASHBY AV', '7TH ST')], fwy_from(37.8536)),
+}
+
+
+def to_bridge(xy):
+    """Street route to the best freeway entry, then I-80 and the Bay Bridge to Rincon Hill."""
+    if math.dist(xy, ECP) < 50:
+        return pl([ECP, LL(37.89600, -122.30100), LL(37.88900, -122.30450)] + fwy_from(37.8817))
+    best = None
+    for entry, fwy in ENTRIES.values():
+        p = street(xy, entry, 'car') + [[r1(x), r1(y)] for x, y in fwy]
+        L = length(street(xy, entry, 'car'))
+        if best is None or L < best[0]:
+            best = (L, p)
+    return pl(best[1])
+
+
+def track_to_west_oakland(name, ll):
+    q = LL(*ll)
+    if q in BART_NORTH:
+        return pl(BART_NORTH[BART_NORTH.index(q):] + BART_SOUTH[1:])
+    return pl(BART_SOUTH[BART_SOUTH.index(q):])
+
 
 # ---------------------------------------------------------------- per home
-marina_xy = nodes[nearest(TERMINAL, 'car')] if TERMINAL else nodes[MARINA]
+MI = 1609.344
 out = {'homes': {}, 'stations': {}}
+stations = {}
 for hid, h in HOMES.items():
     home = LL(*h['ll'])
+    stations[h['station']['name']] = h['station']['ll']
+    if h.get('parkRide'):
+        stations[h['parkRide']['station']['name']] = h['parkRide']['station']['ll']
     st = LL(*h['station']['ll'])
-    r = {}
-    for mode in ('car', 'bike'):
-        r[mode] = {
-            'station': street(home, st, mode, a_home=hid),
-            'marina': street(home, marina_xy, mode, a_home=hid),
-        }
-    r['car']['i80'] = street(home, nodes[I80_ENTRY], 'car', a_home=hid)
+    r = {m: {'station': street(home, st, m), 'marina': street(home, MARINA_XY, m)} for m in ('car', 'bike')}
+    r['car']['bridge'] = to_bridge(home)
+    if h.get('parkRide'):
+        r['car']['parkRide'] = street(home, LL(*h['parkRide']['station']['ll']), 'car')
     out['homes'][hid] = r
-    name = h['station']['name']
-    if name not in out['stations']:
-        out['stations'][name] = {
-            'marina': street(st, marina_xy, 'car'),
-            # station -> West Oakland along the tracks
-            'bart': pl(BART_NORTH[BART_NORTH.index(LL(*STATION_LL[name])):] + BART_SOUTH[1:])
-            if name in STATION_LL else None,
-        }
+    ln = {f'{m}.{k}': round(length(v) / MI, 2) for m in r for k, v in r[m].items()}
+    print(hid, ln)
+for name, ll in stations.items():
+    xy = LL(*ll)
+    out['stations'][name] = {'marina': street(xy, MARINA_XY, 'car'), 'bridge': to_bridge(xy),
+                             'bart': track_to_west_oakland(name, ll)}
+    print(name, 'to marina', round(length(out['stations'][name]['marina']) / MI, 2), 'mi;',
+          'to bridge', round(length(out['stations'][name]['bridge']) / MI, 2), 'mi')
 
-out['marinaI80'] = street(marina_xy, nodes[I80_ENTRY], 'car')
-out['freeway'] = pl(FREEWAY)
+out['marinaBridge'] = to_bridge(MARINA_XY)
 out['bridge'] = pl(BAY_BRIDGE)
 out['sfOff'] = {k: pl(v) for k, v in SF_OFF.items()}
 out['transbay'] = pl(TRANSBAY)
@@ -257,6 +282,4 @@ out['bartLine'] = pl(BART_NORTH + BART_SOUTH[1:])
 with open('js/play-geo.js', 'w') as f:
     f.write('// Generated by tools/build-play-geo.py. Do not edit.\n')
     f.write('window.PLAYGEO = ' + json.dumps(out, separators=(',', ':')) + ';\n')
-for hid, r in out['homes'].items():
-    print(hid, {m: {k: len(v) for k, v in r[m].items()} for m in r})
 print('written js/play-geo.js')

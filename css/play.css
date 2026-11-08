@@ -23,7 +23,8 @@
 .flabel { display: block; font-weight: 800; margin-bottom: 4px; }
 .row2 { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
-.seg button { background: var(--panel); color: var(--ink); border-color: var(--line); font-weight: 700; }
+.seg { gap: 4px; }
+.seg button { background: var(--panel); color: var(--ink); border-color: var(--line); font-weight: 700; font-size: 14px; padding: 4px 8px; line-height: 1.2; }
 .seg button small { display: block; font-weight: 500; font-size: 0.75em; color: var(--muted); }
 .seg button.on { background: #ffd166; color: #1d2230; border-color: #1d2230; }
 .seg button.on small { color: #5c5446; }

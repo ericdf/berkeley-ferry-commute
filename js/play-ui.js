@@ -27,7 +27,10 @@
     civic: PL.civicCenterBart, fidi: PL.montgomeryBart, soma: ll(C.dests.soma.ll), mbay: ll(C.dests.mbay.ll),
   };
   const homePt = (id) => ll(C.homes[id].ll);
-  const stationPt = (id) => ll(C.homes[id].station.ll);
+  // Drive → BART parks at the home's park-and-ride station; everything else uses the home station
+  const parkRiding = () => !!(st.chosen && st.chosen.via === 'bart' && st.chosen.access === 'drive');
+  const stationOf = (id) => (parkRiding() && id === st.profile.home ? C.homes[id].parkRide.station : C.homes[id].station);
+  const stationPt = (id) => ll(stationOf(id).ll);
   const destPt = () => pt[st.profile.dest];
   const pierTail = [PL.pierFoot, PL.pierEnd];             // lot or bike rack to the end of the pier
   const marketSt = () => ({ civic: [pt.emb, PL.montgomeryBart, PL.powellBart, pt.civic],
@@ -38,7 +41,7 @@
   const ferryEgress = () => ({ fidi: [pt.fb, pt.emb, pt.fidi], soma: [pt.fb, ll([37.7905, -122.3890]), pt.soma], civic: [pt.fb, ...marketSt()],
     mbay: [pt.fb, pt.emb, ...[[37.7900, -122.3890], [37.7860, -122.3880], [37.7790, -122.3893], [37.7762, -122.3945], [37.7705, -122.3905]].map(ll), pt.mbay] })[st.profile.dest];
   const tube = () => [...PG.transbay.slice(0, -1), ...marketSt()];
-  const toSF = () => [...PG.freeway.slice(1), ...PG.sfOff[st.profile.dest].slice(1, -1), destPt()];
+  const toSF = (bridgeRoute) => [...bridgeRoute, ...PG.sfOff[st.profile.dest].slice(1, -1), destPt()];
 
   function keyPt(k) {
     if (k === 'home') return homePt(st.profile.home);
@@ -50,18 +53,19 @@
   function legPath(L) {
     const has = (k) => L.from === k || L.to === k;
     const from = (k, p) => (L.from === k ? p : p.slice().reverse());   // p is drawn starting at k
-    const H = PG.homes[st.profile.home], stn = PG.stations[C.homes[st.profile.home].station.name];
+    const H = PG.homes[st.profile.home], stn = PG.stations[stationOf(st.profile.home).name];
     const net = H[L.mode === 'car' || L.mode === 'bus' ? 'car' : 'bike'];
     if (L.mode === 'ferry') return from('marina', G.ferry.slice());
     if (has('fb') && L.mode !== 'ferry') return from('fb', ferryEgress());
     if (L.mode === 'bart') return from('station', [...stn.bart, ...tube().slice(1)]);
-    if (has('home') && has('dest')) return from('home', [...H.car.i80, ...toSF()]);
-    if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...PG.marinaI80, ...toSF()]);
+    if (has('home') && has('dest')) return from('home', toSF(H.car.bridge));
+    if (has('marina') && has('dest')) return from('marina', [...pierTail.slice().reverse(), ...toSF(PG.marinaBridge)]);
+    if (has('station') && has('dest')) return from('station', toSF(stn.bridge));   // BART lot full: drive in
     if (has('home') && has('marina')) {
       const p = L.mode === 'car' && st.profile.home === 'hills' ? G.routes.am.pts : net.marina; // hills: the cartoon's own drive
       return from('home', [...p, ...pierTail]);
     }
-    if (has('home') && has('station')) return from('home', net.station);
+    if (has('home') && has('station')) return from('home', parkRiding() && L.mode === 'car' ? H.car.parkRide : net.station);
     if (has('station') && has('marina')) return from('station', [...stn.marina, ...pierTail]);
     return [keyPt(L.from), keyPt(L.to)];
   }
@@ -128,16 +132,17 @@
       const x = Math.min(Math.max(view.sx(q[0]), half), cv.width - half);
       text(s, x, view.sy(q[1]), size, { color: col || '#6d6046', weight: 800 });
     };
-    L(37.8035, -122.428, 'San Francisco', 15); L(37.861, -122.262, 'Berkeley', 15);
+    L(37.8035, -122.428, 'San Francisco', 15); L(37.8705, -122.2495, 'Berkeley', 15);
     L(37.812, -122.272, 'Oakland', 14); L(37.823, -122.371, 'Treasure Is.', 11); L(37.822, -122.334, 'Bay Bridge', 11, '#5a5446');
   }
 
+  const LABEL_BELOW = new Set(['south', 'elmwood']);   // keep neighbours' labels apart
   function drawPins() {
     // stations
-    const seen = new Set();
-    for (const h of Object.keys(C.homes)) {
-      const s = C.homes[h].station; if (seen.has(s.name)) continue; seen.add(s.name);
-      const q = stationPt(h), x = view.sx(q[0]), y = view.sy(q[1]), r = 6 * view.dpr;
+    const all = new Map();
+    for (const h of Object.values(C.homes)) for (const s of [h.station, h.parkRide && h.parkRide.station]) if (s) all.set(s.name, s);
+    for (const s of all.values()) {
+      const q = ll(s.ll), x = view.sx(q[0]), y = view.sy(q[1]), r = 6 * view.dpr;
       ctx.fillStyle = '#1d6fb8'; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * view.dpr; ctx.strokeRect(x - r, y - r, 2 * r, 2 * r);
     }
@@ -154,7 +159,10 @@
       const q = homePt(h), on = h === st.profile.home;
       house(view.sx(q[0]), view.sy(q[1]), (on ? 13 : 9) * view.dpr, on);
       if (on || (cv.width / view.dpr > 480 && $('setup').hidden === false))
-        text(C.homes[h].label, view.sx(q[0]), view.sy(q[1]) - (on ? 22 : 17) * view.dpr, on ? 13 : 11, { color: on ? '#1d2230' : '#6d6046' });
+      {
+        const below = LABEL_BELOW.has(h), dy = (on ? 22 : 17) * view.dpr;
+        text(C.homes[h].label, view.sx(q[0]), view.sy(q[1]) + (below ? dy * 1.2 : -dy), on ? 13 : 11, { color: on ? '#1d2230' : '#6d6046' });
+      }
     }
   }
   function star(x, y, r) {
@@ -186,13 +194,13 @@
         if (k < 1) { const q = along(p, k); dot(q, 7, MODE_COL[L.mode] || '#333', '#fff'); }
       }
       const d = a.day;
-      if (d.lotFull && f > 0.12) bigX(pt.marina);
+      if (d.lotFull && f > 0.12) (st.chosen.via === 'bart' ? bigX(stationPt(st.profile.home), -1) : bigX(pt.marina, 1));
       if (d.stranded && f > 0.7) { const q = pt.marina; text('🚗 stranded', view.sx(q[0]) - 12 * view.dpr, view.sy(q[1]) - 18 * view.dpr, 13, { align: 'right', color: '#a8261a', weight: 900 }); }
     }
     drawPins();
   }
-  function bigX(q) {
-    const x = view.sx(q[0]) + 22 * view.dpr, y = view.sy(q[1]) - 6 * view.dpr, r = 10 * view.dpr;
+  function bigX(q, side) {   // side: 1 = right of the point, -1 = left
+    const x = view.sx(q[0]) + side * 22 * view.dpr, y = view.sy(q[1]) - 6 * view.dpr, r = 10 * view.dpr;
     ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 5 * view.dpr; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke();
     text('LOT FULL', x, y + 20 * view.dpr, 12, { color: '#a8261a', weight: 900 });
@@ -228,7 +236,7 @@
     seg($('homeSeg'), Object.entries(C.homes).map(([k, h]) => [k, h.label, h.sub]), p.home, (v) => { p.home = v; renderSetup(); });
     seg($('destSeg'), Object.entries(C.dests).map(([k, d]) => [k, d.label]), p.dest, (v) => { p.dest = v; renderSetup(); });
     seg($('schedSeg'), [['steady', 'Predictable'], ['normal', 'Normal'], ['chaotic', 'All over the place']], p.schedule, (v) => { p.schedule = v; renderSetup(); });
-    $('hasCar').checked = !!p.has.car; $('hasBike').checked = !!p.has.bike; $('hasEbike').checked = !!p.has.ebike; $('kids').checked = !!p.kids; $('strict').checked = !!p.strict;
+    $('hasCar').checked = !!p.has.car; $('hasBike').checked = !!p.has.bike; $('hasEbike').checked = !!p.has.ebike; $('kids').checked = !!p.kids; $('strict').checked = !!p.strict; $('bikeAlong').checked = !!p.bikeAlong;
     $('rainLyft').checked = !!p.rainLyft;
     $('vot').value = p.vot; $('votOut').textContent = '$' + p.vot;
     draw(performance.now());
@@ -245,6 +253,7 @@
     $('hasEbike').onchange = (e) => { st.profile.has.ebike = e.target.checked; };
     $('kids').onchange = (e) => { st.profile.kids = e.target.checked; };
     $('strict').onchange = (e) => { st.profile.strict = e.target.checked; };
+    $('bikeAlong').onchange = (e) => { st.profile.bikeAlong = e.target.checked; };
     $('rainLyft').onchange = (e) => { st.profile.rainLyft = e.target.checked; };
     $('vot').oninput = (e) => { st.profile.vot = +e.target.value; $('votOut').textContent = '$' + st.profile.vot; };
     $('toPick').onclick = () => { applyTweaks(); show('pick'); renderPick(); };
@@ -306,7 +315,7 @@
     [...$('cal').children].forEach((b, k) => { b.className = 'dsq ' + (k <= lastShown ? dayClass(st.chosen.days[k]) : '') + (k === i ? ' now' : ''); });
     const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][i % 5];
     $('dayCard').innerHTML = `<h3>Day ${i + 1} · ${wd}</h3><ul>${d.ev.map((e) => `<li class="${e.kind}"><time>${fmt(e.t)}</time><span>${e.text}</span></li>`).join('')}</ul>
-      <div class="dsum">${Math.round(d.amMin)} min there${d.earlyMin >= 10 ? ` (+${Math.round(d.earlyMin)} early)` : ''} · ${Math.round(d.pmMin)} min back · ${Math.round(d.walkMin)} min on foot · ${S.money(d.cost)}</div>`;
+      <div class="dsum">${Math.round(d.amMin)} min there${d.earlyMin >= 10 ? ` (+${Math.round(d.earlyMin)} early)` : ''} · ${Math.round(d.pmMin)} min back · ${Math.round(d.walkMin)} min on foot · ${Math.round(d.waitMin)} min waiting · ${S.money(d.cost)}</div>`;
     tallies(Math.max(i, lastShown));
     const legs = d.legs.map((L) => { const path = legPath(L); return { ...L, path, len: Math.max(1, pathLen(path)) }; });
     st.anim = { legs, total: legs.reduce((a, L) => a + L.len, 0), t0: performance.now(), dur: (still ? 900 : 2200) / st.speed, day: d };
@@ -344,7 +353,7 @@
     const flags = (x) => [x.lateDays ? `${x.lateDays} late${strict ? ' ✗' : ''}` : '', x.lotFull ? `${x.lotFull} lot full` : '', x.stranded ? `${x.stranded} stranded` : '', x.lyfts ? `${x.lyfts} Lyft` : ''].filter(Boolean).join(', ');
     $('verdict').innerHTML = `<span class="vbig">${mine.label}: ${money0(t.cost)} and ${t.hours.toFixed(0)} hours this month.</span>` +
       `<span class="vhome">Home by <b>${fmt(t.homeTypical)}</b> on a typical day · latest <b>${fmt(t.homeLatest)}</b></span>` +
-      `<span class="vwalk">${t.hours.toFixed(0)} hours counts every leg: ${Math.round(t.walkMin / C.days)} min a day on foot, waits, and time at work before it starts.</span>` +
+      `<span class="vwalk">${t.hours.toFixed(0)} hours counts every leg: ${Math.round(t.walkMin / C.days)} min a day on foot, ${Math.round(t.waitMin / C.days)} min waiting, and time at work before it starts.</span>` +
       (strict && t.lateDays ? `<span class="vlate">Late ${t.lateDays === 1 ? 'once' : t.lateDays + ' times'}, in a job where you can't be.</span>` : '') +
       (best.id === mine.id ? `That was the best fit for your life${strict ? ' among the options that were never late' : ''}, counting your time at $${vot}/hour.`
         : `The best fit for your life${strict && onTime.length ? ' that was never late' : ''} was <b>${best.label}</b>: ${money0(best.totals.cost)} and ${best.totals.hours.toFixed(0)} hours, home by ${fmt(best.totals.homeTypical)}. ` +
@@ -368,6 +377,7 @@
       ['Ferry schedule (proposed)', `Berkeley → SF: ${C.ferry.amFromBerkeley.map((s) => fmt(T(s))).join(', ')}<br>SF → Berkeley: ${C.ferry.pmFromSF.map((s) => fmt(T(s))).join(', ')}`, 'WETA business plan: 8 AM and 8 PM peak trips, ~35-min headway; exact times illustrative'],
       ['Ferry trip', `${C.ferry.boardMin + C.ferry.sailMin + C.ferry.dockMin} min boarding to stepping off; fare $${C.ferry.fare}`, 'WETA projected 2035 fare'],
       ['Ferry parking', `${C.ferry.lot.stalls} paid stalls + ~${C.ferry.lot.curb} on Marina Blvd; none on University west of I-80. Usually full by ${fmt(T(C.ferry.lot.fillMean))} (±${C.ferry.lot.fillSdMin} min). $${C.ferry.lot.fee}/day.`, 'Draft Parking Mgmt Plan (May 2026); fill time is a game assumption, shared with riders from Albany, El Cerrito and beyond'],
+      ['BART parking', [...new Map(Object.values(C.homes).flatMap((h) => [h.station, h.parkRide && h.parkRide.station]).filter((x) => x && x.lot).map((x) => [x.name, x])).values()].map((x) => `${x.name}: full by about ${fmt(T(x.lot.fillMean))}, $${x.lot.fee.toFixed(2)}/day`).join('; ') + '. Downtown Berkeley has no BART lot.', 'fill times: game assumptions'],
       ['If the next boat is more than', `${C.ferry.maxWaitBeforeBart} min away, you take BART instead. If your car is at the Marina, you go back for it.`, 'game rule'],
       ['BART', `Fares (2026): ${Object.values(C.homes).map((h) => `${h.station.name} $${h.station.fare.civic.toFixed(2)}`).filter((v, i, a) => a.indexOf(v) === i).join(', ')} to Civic Center. Wait 0–${C.bart.waitMaxMin} min; ${Math.round(C.bart.delayP * 100)}% chance of a delay.`, '2026 fare table; some fares estimated'],
       ['Driving into SF', `Bay Bridge toll $${C.drive.toll} (westbound), garage $${C.dests.civic.garage}/day near Civic Center, $${C.drive.perMile}/mile. ${Math.round(C.drive.bridgeMessP * 100)}% chance of a bad bridge day.`, 'toll: 2026; garage and per-mile: estimates'],

@@ -10,6 +10,19 @@
 // Times are 'H:MM' 24-hour strings or minutes. Legs given as [am, pm] are
 // [outbound, return] minutes (e.g. downhill vs. uphill on a bike).
 // ============================================================================
+// BART stations. lot: all-day parking that fills by a time each morning (null = no BART lot).
+const ST = {
+  dbk:   { name: 'Downtown Berkeley', ll: [37.8701, -122.2681], rideCivic: 25,
+           fare: { civic: 5.30, fidi: 5.05 }, lot: null },               // [input] civic: 2026 BART fare table
+  nbk:   { name: 'North Berkeley', ll: [37.8740, -122.2834], rideCivic: 27,
+           fare: { civic: 5.40, fidi: 5.15 }, lot: { fee: 3.00, fillMean: '7:35', fillSdMin: 10 } },
+  ashby: { name: 'Ashby', ll: [37.8529, -122.2700], rideCivic: 23,
+           fare: { civic: 5.15, fidi: 4.90 }, lot: { fee: 3.00, fillMean: '7:30', fillSdMin: 10 } },
+  ecp:   { name: 'El Cerrito Plaza', ll: [37.9030, -122.2990], rideCivic: 31,
+           fare: { civic: 5.70, fidi: 5.45 }, lot: { fee: 3.00, fillMean: '7:20', fillSdMin: 10 } }, // [input] civic fare
+};
+// lots: [estimate] $3/day; fill times [scenario]
+
 window.PLAY = {
   days: 21,                                  // [scenario] workdays in a month
 
@@ -22,6 +35,7 @@ window.PLAY = {
     schedule: 'normal',                      // steady | normal | chaotic
     vot: 25,                                 // [scenario] $ per hour of your time
     rainLyft: true,                          // cyclists take a Lyft when it rains
+    bikeAlong: true,                         // the bike rides BART or the ferry and you ride the SF end
   },
 
   strictCushionMin: 30,                      // [scenario] can't-be-late: plan to be at work this early
@@ -53,6 +67,7 @@ window.PLAY = {
   bart: {
     stationMin: 3,                           // [scenario] street to platform, each end
     bikeParkMin: 2,                          // [scenario] lock or unlock the bike at the station
+    parkMin: 4,                              // [scenario] find a space in the BART lot and pay
     waitMaxMin: 10,                          // [scenario] wait is uniform 0..this
     delayP: 0.05, delayMin: [10, 25],        // [estimate] chance per trip of a meaningful delay
     fbToEmbarcaderoMin: 8,                   // [map] Ferry Building to Embarcadero platform
@@ -62,18 +77,21 @@ window.PLAY = {
   dests: {
     civic: {
       label: 'Civic Center', fareKey: 'civic', bartRideAdj: 0, bartWalkMin: 4,
+      bikeFromFerry: 12, bikeFromBart: 2,    // [map] up Market St, 1.9 mi
       ferryEgressMin: 27, ferryEgressWalkMin: 10, ferryEgressFare: 2.55, // [scenario] FB→Embarcadero→BART→Civic Center (cartoon legs); [input] 2026 fare
       garage: 30,                            // [estimate] all-day garage near Civic Center
       driveAdjMin: 0,
     },
     fidi: {
       label: 'Financial District', fareKey: 'fidi', bartRideAdj: -6, bartWalkMin: 6,
+      bikeFromFerry: 4, bikeFromBart: 2,
       ferryEgressMin: 8, ferryEgressFare: 0,
       garage: 38,                            // [estimate]
       driveAdjMin: -3,
     },
     soma: {                                  // 2nd & Folsom: the Google, Salesforce and startup blocks
       label: 'SoMA', fareKey: 'fidi', bartRideAdj: -7, bartWalkMin: 11,   // Embarcadero station, then walk
+      bikeFromFerry: 6, bikeFromBart: 4,
       ferryEgressMin: 16, ferryEgressFare: 0, // [map] Ferry Bldg down the Embarcadero and Folsom, ~0.8 mi
       garage: 32,                            // [estimate]
       driveAdjMin: -5,                       // first exits off the bridge
@@ -81,6 +99,7 @@ window.PLAY = {
     },
     mbay: {                                  // 3rd St at Chase Center: Uber, UCSF, the biotech blocks
       label: 'Mission Bay', fareKey: 'civic', bartRideAdj: -2,             // Powell St station...
+      bikeFromFerry: 12, bikeFromBart: 11,   // [map] Embarcadero to Chase Center 2.1 mi; Powell down 4th St
       bartWalkMin: 24, bartFootMin: 9, bartEgressFare: 2.85, // ...then the Central Subway T to UCSF/Chase Center. [input] Muni $2.85
       ferryEgressMin: 30, ferryEgressWalkMin: 10, ferryEgressFare: 2.85, ferryEgressMode: 'muni',  // Muni from Embarcadero down King St
       garage: 28,                            // [estimate]
@@ -95,7 +114,8 @@ window.PLAY = {
     toll: 8.50,                              // [input] Bay Bridge 2026, charged westbound only
     trafficMin: [0, 15],                     // [scenario] everyday variation, each way
     bridgeMessP: 0.15, bridgeMessMin: [15, 40], // [scenario] a bad day on the bridge
-    marinaToSF: { min: 28, miles: 11 },      // [estimate] fallback when the lot is full
+    marinaToSF: { min: 28, miles: 11 },      // [estimate] fallback when the ferry lot is full
+    stationToSF: { min: 28, miles: 11 },     // [estimate] fallback when the BART lot is full
     garageWalkMin: 5,
   },
 
@@ -126,55 +146,71 @@ window.PLAY = {
   },
 
   // ---------------- Where you live ----------------
-  // Positions are lat/lon. Leg minutes are door to door for that leg at commute hour.
-  // [estimate] unless noted. bike/ebike are [to, from]; null = not a realistic option.
+  // Positions are lat/lon. Leg minutes are door to door for that leg at commute hour, from the
+  // street-route lengths that tools/build-play-geo.py prints. [estimate] unless noted.
+  // bike/ebike are [to, from]; null = not a realistic option.
+  // parkRide: where you'd drive and park for BART (Downtown Berkeley has no BART lot).
   homes: {
     hills: {
       label: 'Berkeley hills', sub: 'Grizzly Peak & Senior', ll: [37.8829, -122.2489],
-      station: { name: 'Downtown Berkeley', ll: [37.8701, -122.2681], rideCivic: 25,
-                 fare: { civic: 5.30, fidi: 5.05 },      // [input] civic: 2026 BART fare table
-                 rescueLyft: { min: 10, cost: 14 } },
+      station: { ...ST.dbk, rescueLyft: { min: 10, cost: 14 } },
       toStation: { walk: null, bike: [14, 40], ebike: [12, 20],
                    bus: { name: 'AC Transit 65', ride: 30, headway: 45, fare: 2.50 }, // [input] ~45-min headway, ~30-min ride
                    lyft: { min: 13, cost: 21 } },
       toMarina:  { walk: null, bike: [25, 50], ebike: [20, 28],
                    bus: { name: '65 + 51B', ride: 50, headway: 45, fare: 2.50 },
                    lyft: { min: 18, cost: 26 }, drive: { min: 20, miles: 4.9 } },        // [map] 4.9 mi, cartoon route
+      parkRide: { station: ST.nbk, drive: { min: 12, miles: 2.8 } },   // [map] 2.8 mi
       driveSF: { min: 45, miles: 15 },
+    },
+    toaks: {
+      label: 'Thousand Oaks', sub: 'Thousand Oaks & Colusa', ll: [37.89654, -122.28523],
+      station: { ...ST.ecp, rescueLyft: { min: 16, cost: 20 } },
+      toStation: { walk: 19, bike: [6, 9], ebike: [5, 5], bus: null, lyft: { min: 5, cost: 10 } },
+      toMarina:  { walk: null, bike: [23, 26], ebike: [16, 17], bus: null,
+                   lyft: { min: 14, cost: 17 }, drive: { min: 14, miles: 4.0 } },
+      parkRide: { station: ST.ecp, drive: { min: 4, miles: 0.9 } },
+      driveSF: { min: 35, miles: 14 },
     },
     nberk: {
       label: 'North Berkeley flats', sub: 'Cedar & California', ll: [37.8775, -122.2795],
-      station: { name: 'North Berkeley', ll: [37.8740, -122.2834], rideCivic: 27,
-                 fare: { civic: 5.40, fidi: 5.15 }, rescueLyft: { min: 9, cost: 13 } },
+      station: { ...ST.nbk, rescueLyft: { min: 9, cost: 13 } },
       toStation: { walk: 10, bike: [4, 4], ebike: [3, 3], bus: null, lyft: { min: 5, cost: 10 } },
       toMarina:  { walk: null, bike: [15, 17], ebike: [11, 12],
                    bus: { name: 'AC Transit 51B', ride: 20, headway: 25, fare: 2.50 },
                    lyft: { min: 10, cost: 16 }, drive: { min: 11, miles: 3.0 } },
+      parkRide: { station: ST.nbk, drive: { min: 3, miles: 0.5 } },
       driveSF: { min: 35, miles: 13 },
     },
-    westb: {
-      label: 'West Berkeley', sub: '5th & Virginia', ll: [37.8722, -122.2997],
-      station: { name: 'Downtown Berkeley', ll: [37.8701, -122.2681], rideCivic: 25,
-                 fare: { civic: 5.30, fidi: 5.05 }, rescueLyft: { min: 10, cost: 14 } },
-      toStation: { walk: 35, bike: [11, 12], ebike: [8, 9],
-                   bus: { name: 'AC Transit 51B', ride: 15, headway: 15, fare: 2.50 },
-                   lyft: { min: 8, cost: 12 } },
-      toMarina:  { walk: 22, bike: [8, 8], ebike: [6, 6], bus: null,
-                   lyft: { min: 6, cost: 11 }, drive: { min: 6, miles: 1.5 } },
+    central: {
+      label: 'Central Berkeley', sub: 'Dwight & Bonar', ll: [37.86159, -122.28581],
+      station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
+      toStation: { walk: 31, bike: [9, 9], ebike: [7, 7], bus: null, lyft: { min: 7, cost: 12 } },
+      toMarina:  { walk: null, bike: [13, 14], ebike: [9, 10], bus: null,
+                   lyft: { min: 10, cost: 13 }, drive: { min: 9, miles: 2.2 } },
+      parkRide: { station: ST.ashby, drive: { min: 6, miles: 1.6 } },
+      driveSF: { min: 30, miles: 12 },
+    },
+    elmwood: {
+      label: 'Elmwood', sub: 'Russell & Benvenue', ll: [37.85832, -122.2544],
+      station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
+      toStation: { walk: 21, bike: [7, 7], ebike: [5, 5], bus: null, lyft: { min: 6, cost: 11 } },
+      toMarina:  { walk: null, bike: [26, 27], ebike: [18, 19],
+                   bus: { name: 'AC Transit 51B', ride: 40, headway: 15, fare: 2.50 },
+                   lyft: { min: 17, cost: 19 }, drive: { min: 16, miles: 4.5 } },
+      parkRide: { station: ST.ashby, drive: { min: 5, miles: 1.1 } },
+      driveSF: { min: 33, miles: 12 },
+    },
+    south: {
+      label: 'South Berkeley', sub: 'King & Ashby', ll: [37.8539, -122.27424],
+      station: { ...ST.ashby, rescueLyft: { min: 13, cost: 17 } },
+      toStation: { walk: 8, bike: [3, 3], ebike: [2, 2], bus: null, lyft: { min: 4, cost: 9 } },
+      toMarina:  { walk: null, bike: [20, 21], ebike: [14, 15], bus: null,
+                   lyft: { min: 13, cost: 16 }, drive: { min: 12, miles: 3.3 } },
+      parkRide: { station: ST.ashby, drive: { min: 2, miles: 0.4 } },
       driveSF: { min: 30, miles: 11 },
     },
-    albany: {
-      label: 'Albany', sub: 'Solano Ave', ll: [37.8907, -122.2930],
-      station: { name: 'El Cerrito Plaza', ll: [37.9030, -122.2990], rideCivic: 31,
-                 fare: { civic: 5.70, fidi: 5.45 },      // [input] civic: 2026 BART fare table
-                 rescueLyft: { min: 12, cost: 18 } },
-      toStation: { walk: 15, bike: [6, 6], ebike: [5, 5], bus: null, lyft: { min: 6, cost: 11 } },
-      toMarina:  { walk: null, bike: [22, 24], ebike: [15, 16], bus: null,
-                   lyft: { min: 12, cost: 18 }, drive: { min: 12, miles: 3.6 } },
-      driveSF: { min: 35, miles: 14 },
-    },
   },
-
 
   // ---------------- The strategies ----------------
   // access: drive | bike | ebike | transit (bus, or walk if close) | lyft
@@ -186,6 +222,8 @@ window.PLAY = {
     { id: 'ferry_bike',        via: 'ferry', access: 'bike',  label: 'Bike → Ferry' },
     { id: 'ferry_transit',     via: 'ferry', access: 'transit', label: 'Bus → Ferry' },
     { id: 'ferry_lyft',        via: 'ferry', access: 'lyft',  label: 'Lyft → Ferry' },
+    { id: 'bart_drive',        via: 'bart',  access: 'drive', label: 'Drive → BART' },
+    { id: 'bart_drive_early',  via: 'bart',  access: 'drive', beatLot: 1, label: 'Drive → BART before the lot fills' },
     { id: 'bart_ebike',        via: 'bart',  access: 'ebike', label: 'E-bike → BART' },
     { id: 'bart_bike',         via: 'bart',  access: 'bike',  label: 'Bike → BART' },
     { id: 'bart_transit',      via: 'bart',  access: 'transit', label: 'Bus → BART' },

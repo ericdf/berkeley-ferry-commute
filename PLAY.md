@@ -19,14 +19,15 @@ Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps 
 ## How the simulation works
 
 1. **Luck is drawn once per month** (`drawLuck`, seeded). Every random number is drawn in a fixed order whether or not it gets used, so changing one setting never reshuffles the rest. Each day has: running late (5–15 min), a late meeting (45–120 min), the school calling (leave 12:30–3:00), rain, the time the ferry lot fills, BART wait and delay, bus lateness, Lyft surge, and bridge traffic.
-2. **Each strategy plans like a sensible person.** It works backward from "be at work by" to a leave time. With **"I can never be late"** checked, it plans to arrive `strictCushionMin` (30) minutes early, and the results pick the best option that was never late. Ferry riders pick the latest boat that gets them there on time; the "one boat early" variant takes the boat before that to beat the parking.
+2. **Each strategy plans like a sensible person.** Drive → BART parks at the home's `parkRide` station (Downtown Berkeley has no BART lot, so the hills park at North Berkeley). Each BART lot fills by a time each morning (`ST` at the top of `js/play-config.js`); arrive after that and you drive into SF. "Before the lot fills" leaves early enough to beat it. With "my bike rides BART or the ferry with me", bike riders ride the SF end too (`bikeFromBart`, `bikeFromFerry`) instead of walking or taking Muni.
+   Planning: It works backward from "be at work by" to a leave time. With **"I can never be late"** checked, it plans to arrive `strictCushionMin` (30) minutes early, and the results pick the best option that was never late. Ferry riders pick the latest boat that gets them there on time; the "one boat early" variant takes the boat before that to beat the parking.
 3. **Then the day plays forward** with that day's luck, and the consequences fall out of it:
    - You arrive at the Marina after the lot fills, so you drive into SF (toll plus garage).
    - You miss the planned boat, so you wait about 35 minutes.
    - You get out at 1:30 PM, or after the last boat, or the next boat is more than 45 min off: you take BART home. **If your car is at the Marina, you Lyft back for it** (the stranded car).
    - The bus is too far off, or service has ended: Lyft.
    - It rains: cyclists Lyft, or ride wet (the user decides).
-4. **Scoring:** money, hours (every leg, every minute on foot, waits, and time at work before it starts), when you get home (typical = median, and the latest), late-to-work days, lot-full days, stranded cars, Lyft count. "Total" is money plus hours × the user's value of time.
+4. **Scoring:** money (fares, parking, Muni, tolls, garages, and $/mile for every drive), hours (every leg, every minute on foot, every wait on a platform, pier, bus stop or Lyft pickup, and time at work before it starts), when you get home (typical = median, and the latest), late-to-work days, lot-full days, stranded cars, Lyft count. "Total" is money plus hours × the user's value of time.
 
 ## Known simplifications and next steps
 
@@ -35,7 +36,7 @@ Open `play.html` (same static server as the cartoon). `?auto=ferry_drive` jumps 
 - **Lot fill is one normal distribution** (default 7:25 ± 12 min). Better: derive it from stalls ÷ arrivals per boat, including riders from Albany, El Cerrito, Kensington and Emeryville.
 - **No overnight logic.** A stranded car is rescued the same evening. Leaving it overnight and taking a Lyft back the next morning is another option.
 - **No Clipper transfer discount**, no monthly passes, no BayPass.
-- **Only four home presets.** Next step: tap anywhere on the map and route from there.
+- **Only six home presets.** Next step: tap anywhere on the map and route from there.
 - **Regional analysis:** score LEHD LODES home→work pairs with `PlaySim.runAll` to estimate how many commuters each mode serves best.
 - **Cartoon tie-in:** a "watch this day" button could play the chosen day in the cartoon's scene engine.
 
