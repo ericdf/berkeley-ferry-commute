@@ -49,15 +49,21 @@
       const bartWait = [r() * C.bart.waitMaxMin, r() * C.bart.waitMaxMin];
       const bartDelay = [uni(C.bart.delayMin), uni(C.bart.delayMin)].map((v) => gate(C.bart.delayP, v));
       const busLate = [uni(C.bus.lateMin), uni(C.bus.lateMin)].map((v) => gate(C.bus.lateP, v));
-      const surge = [r() < C.lyft.surgeP, r() < C.lyft.surgeP];
+      // Rain changes the odds, not the order of the draws: surge and bridge trouble are likelier,
+      // and every drive gets a rain slowdown on top of everyday traffic.
+      const R = C.rainFx, surgeP = rain ? R.lyftSurgeP : C.lyft.surgeP, bridgeP = rain ? R.bridgeMessP : C.drive.bridgeMessP;
+      const surge = [r() < surgeP, r() < surgeP];
       const traffic = [uni(C.drive.trafficMin), uni(C.drive.trafficMin)];
-      const bridge = [uni(C.drive.bridgeMessMin), uni(C.drive.bridgeMessMin)].map((v) => gate(C.drive.bridgeMessP, v));
+      const bridge = [uni(C.drive.bridgeMessMin), uni(C.drive.bridgeMessMin)].map((v) => gate(bridgeP, v));
       const bartLotZ = normal();          // how early the BART lots fill today (same day for every station)
+      const rainSlow = [uni(R.trafficMin), uni(R.trafficMin)];
+      const ferryCancel = r() < (rain ? R.ferryCancelP : 0);
+      if (rain) { traffic[0] += rainSlow[0]; traffic[1] += rainSlow[1]; }
       days.push({
         runLate: Math.round(runLate),
         leaveEarlyAt: earlyHit ? Math.round(earlyV / 5) * 5 : null,
         lateMeeting: !earlyHit && meetHit ? Math.round(meetV / 5) * 5 : 0,
-        rain, lotFill, bartLotZ, bartWait, bartDelay, busLate, surge, traffic, bridge,
+        rain, ferryCancel, lotFill, bartLotZ, bartWait, bartDelay, busLate, surge, traffic, bridge,
       });
     }
     return days;
@@ -120,8 +126,8 @@
   function simDay(s, x, luck) {
     const { C, home, dest, profile } = x;
     const d = { ev: [], legs: [], cost: 0, late: 0, stranded: false, lotFull: false, lyfts: 0, drove: false, walkMin: 0, waitMin: 0 };
-    const W = (m) => { d.walkMin += m; return m; };   // minutes on foot, counted in the day like any other leg
-    const part = (total, foot) => { W(foot); return total; };   // a leg that is partly on foot (walk + Muni)
+    const W = (m) => { m *= luck.rain ? C.rainFx.walkX : 1; d.walkMin += m; return m; };   // minutes on foot (slower in the rain)
+    const part = (total, foot) => total + W(foot) - foot;   // a leg that is partly on foot (walk + Muni)
     const egressWalk = dest.ferryEgressWalkMin ?? dest.ferryEgressMin, bartFoot = dest.bartFootMin ?? dest.bartWalkMin;
     const Wt = (m) => { d.waitMin += m; return m; };  // minutes standing around: platforms, piers, bus stops, Lyft pickups
     // Drive → BART parks at the home's park-and-ride station; everyone else uses the home station.
@@ -262,6 +268,7 @@
     const leftHome = clock;
     if (luck.runLate) say(clock, `Out the door ${luck.runLate} min late.`, 'bad');
     else say(clock, `Leave home at ${fmt(clock)}.`);
+    if (luck.rain && !bikeKind) say(clock, luck.ferryCancel ? 'Storm. Wind and rain all day.' : 'Raining. Slow roads, slow walking.', 'bad');
 
     let carAt = null; // 'marina' | 'sf'
 
@@ -323,8 +330,8 @@
       }
       if (toFerry) {
         const boat = boats.find((b) => b >= clock);
-        if (boat == null) {
-          say(clock, 'No more morning boats. Over to BART.', 'bad');
+        if (boat == null || luck.ferryCancel) {
+          say(clock, luck.ferryCancel ? 'Storm: boats canceled. Over to BART.' : 'No more morning boats. Over to BART.', 'bad');
           clock = lyft(home.station.rescueLyft, clock, 'am', 'To BART: ', 'marina', 'station');
           clock = bart(clock, 0) + bartEgress();
         } else {
@@ -389,8 +396,8 @@
     } else {
       const atFB = clock + ferryEgress();
       const boat = F.pmFromSF.map(T).find((b) => b >= atFB);
-      if (boat == null || boat - atFB > F.maxWaitBeforeBart) {
-        say(atFB, boat == null ? 'No boats left tonight. BART home.'
+      if (boat == null || luck.ferryCancel || boat - atFB > F.maxWaitBeforeBart) {
+        say(atFB, luck.ferryCancel ? 'Storm: boats canceled. BART home.' : boat == null ? 'No boats left tonight. BART home.'
                                : `Next boat isn't until ${fmt(boat)}. BART home instead.`, 'bad');
         clock = bart(clock + bartEgress(), 1);
         if (carAt === 'marina') {

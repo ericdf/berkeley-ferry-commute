@@ -167,6 +167,13 @@ window.PLAY = {
 
   bikePerDay: { bike: 0.30, ebike: 1.00 },   // [estimate] wear, charging, amortized purchase
   rainP: 0.12,                               // [estimate] share of workdays wet enough to matter
+  rainFx: {                                  // what rain does [estimate]
+    trafficMin: [5, 20],                     // extra minutes on every drive, each way
+    bridgeMessP: 0.35,                       // a bad bridge day is likelier (vs drive.bridgeMessP)
+    lyftSurgeP: 0.6,                         // surge pricing is likelier (vs lyft.surgeP)
+    walkX: 1.15,                             // walking takes 15% longer
+    ferryCancelP: 0.04,                      // a storm cancels the boats for the day
+  },
 
   // ---------------- Life happens ----------------
   // Probabilities per workday, by how predictable your schedule is.
