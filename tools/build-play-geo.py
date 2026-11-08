@@ -76,9 +76,28 @@ for f in cl['features']:
     tw = p.get('TRVLWAY') or 'B'
     car = p['CLASS'] not in NO_CAR and p.get('SFEATYP') not in ('WK', 'PA', 'LN')
     bike = p['CLASS'] not in NO_CAR
+    # The University Ave overpass over I-80 is closed to bikes and pedestrians: they use the bridge below.
+    if (p.get('STREET') == 'UNIVERSITY AV' and all(-122.3054 < q[0] < -122.3023 for q in c)):
+        bike = False
     t = L / SPEED.get(p['CLASS'], 9.8)
     adj.setdefault(a, []).append((b, L if bike else None, t if car and tw in ('B', 'FT') else None, i, True))
     adj.setdefault(b, []).append((a, L if bike else None, t if car and tw in ('B', 'TF') else None, i, False))
+
+
+# The Berkeley I-80 bike/ped bridge (Aquatic Park, Bolivar Dr at Addison St, to Frontage Rd): not in the
+# street data. Its ramps make it longer than the span, so it counts as 600 m.
+def _bridge():
+    a, b = key(-122.30211, 37.86572), key(-122.3055, 37.86629)
+    if a not in nodes or b not in nodes:
+        raise SystemExit('bike bridge ends not found')
+    pts = [nodes[a], P(-122.3030, 37.86560), P(-122.3045, 37.86600), nodes[b]]
+    i = len(segs)
+    segs.append({'raw': 'I-80 BIKE BRIDGE', 'cls': 'Local', 'pts': pts, 'a': a, 'b': b})
+    adj[a].append((b, 600.0, None, i, True))
+    adj[b].append((a, 600.0, None, i, False))
+
+
+_bridge()
 
 
 def names_at(k):

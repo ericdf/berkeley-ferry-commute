@@ -141,7 +141,7 @@
     L(37.812, -122.272, 'Oakland', 14); L(37.823, -122.371, 'Treasure Is.', 11); L(37.822, -122.334, 'Bay Bridge', 11, '#5a5446');
   }
 
-  const LABEL_BELOW = new Set(['south', 'elmwood']);   // keep neighbours' labels apart
+  const LABEL_SIDE = { south: 'below', elmwood: 'below', central: 'right' };   // keep neighbours' labels apart
   function drawPins() {
     // stations
     const all = new Map();
@@ -165,8 +165,9 @@
       house(view.sx(q[0]), view.sy(q[1]), (on ? 13 : 9) * view.dpr, on);
       if (on || (cv.width / view.dpr > 480 && $('setup').hidden === false))
       {
-        const below = LABEL_BELOW.has(h), dy = (on ? 22 : 17) * view.dpr;
-        text(C.homes[h].label, view.sx(q[0]), view.sy(q[1]) + (below ? dy * 1.2 : -dy), on ? 13 : 11, { color: on ? '#1d2230' : '#6d6046' });
+        const side = LABEL_SIDE[h], dy = (on ? 22 : 17) * view.dpr, o = { color: on ? '#1d2230' : '#6d6046' };
+        if (side === 'right') text(C.homes[h].label, view.sx(q[0]) + dy * 0.8, view.sy(q[1]), on ? 13 : 11, { ...o, align: 'left' });
+        else text(C.homes[h].label, view.sx(q[0]), view.sy(q[1]) + (side === 'below' ? dy * 1.2 : -dy), on ? 13 : 11, o);
       }
     }
   }
